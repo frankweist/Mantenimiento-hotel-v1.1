@@ -16,54 +16,15 @@
   // ---- Data ----
   var GLOBAL_LS = { users:"mh_users_v1", current:"mh_user_current_v1" };
   var LEGACY = "mh_v1_state";
-  var APP_VERSION = "v1.3.8-final-3lvl"; // Versión actualizada a 1.3.8
+  var APP_VERSION = "v1.3.9-cost-difficulty"; // Versión actualizada a 1.3.9
 
-  // --- BLOQUES ORIGINALES (DATOS CORREGIDOS SEGÚN INDICACIONES) ---
   var BLOQUES = [
-    // --- RESIDENCE (Bloques individuales, ahora Nivel 2) ---
     { id: "A", label: "A", from: 2100, to: 2107 },
     { id: "B", label: "B", from: 2200, to: 2207 },
     { id: "C", label: "C", from: 2300, to: 2307 },
     { id: "D", label: "D", from: 2400, to: 2401 },
-    // --- VILLAS ---
     { id: "V", label: "VILLAS", from: 3101, to: 3106 },
-    // --- BRINKMANN (4 PLANTAS, P1, P2, P3, P4) ---
-    { id: "BR-1", label: "BRINKMANN P1", from: 101, to: 129 },
-    { id: "BR-2", label: "BRINKMANN P2", from: 201, to: 241 }, 
-    { id: "BR-3", label: "BRINKMANN P3", from: 301, to: 345 },
-    { id: "BR-4", label: "BRINKMANN P4", from: 401, to: 443 },
-    // --- DARKO (5 PLANTAS, P1 a P5) ---
-    { id: "DR-1", label: "DARKO P1", from: 100, to: 138 },
-    { id: "DR-2", label: "DARKO P2", from: 200, to: 238 },
-    { id: "DR-3", label: "DARKO P3", from: 300, to: 338 },
-    { id: "DR-4", label: "DARKO P4", from: 400, to: 438 },
-    { id: "DR-5", label: "DARKO P5", from: 500, to: 538 },
-    // --- LEIRO TOWER (8 PLANTAS) ---
-    { id: "LT-1", label: "LEIRO TOWER P1", from: 1101, to: 1115 },
-    { id: "LT-2", label: "LEIRO TOWER P2", from: 1201, to: 1219 },
-    { id: "LT-3", label: "LEIRO TOWER P3", from: 1300, to: 1321 },
-    { id: "LT-4", label: "LEIRO TOWER P4", from: 1400, to: 1421 },
-    { id: "LT-5", label: "LEIRO TOWER P5", from: 1500, to: 1521 },
-    { id: "LT-6", label: "LEIRO TOWER P6", from: 1600, to: 1621 },
-    { id: "LT-7", label: "LEIRO TOWER P7", from: 1700, to: 1721 },
-    { id: "LT-8", label: "LEIRO SUITES P8", from: 1800, to: 1821 }, 
   ];
-  
-  // --- ESTRUCTURA DE AGRUPACIÓN (NIVEL 1) ---
-  var BLOQUES_AGRUPADOS = [
-      { id: "Residence", label: "Residence", blocks: ["A", "B", "C", "D"], icon: "🏢" },
-      { id: "Villas", label: "Villas", blocks: ["V"], icon: "🏡" },
-      { id: "Leiro", label: "Leiro Tower", blocks: BLOQUES.filter(b => b.id.startsWith("LT-")).map(b => b.id), icon: "🏙️" },
-      { id: "Darko", label: "Darko (Pares)", blocks: BLOQUES.filter(b => b.id.startsWith("DR-")).map(b => b.id), icon: "🏨" },
-      { id: "Brinkmann", label: "Brinkmann (Impares)", blocks: BLOQUES.filter(b => b.id.startsWith("BR-")).map(b => b.id), icon: "🏛️" },
-  ];
-
-  // Función de ayuda para buscar un bloque por ID
-  function getBlockById(id) {
-      return BLOQUES.find(function(x){ return x.id === id; });
-  }
-
-  // --- Constantes (CHECKS, COLORS, etc.) ---
   var CHECKS = [
     { id: "luces", label: "Luces" },
     { id: "agua_caliente", label: "Agua caliente" },
@@ -79,12 +40,11 @@
     { id: "desperfectos", label: "Desperfectos" },
   ];
   var COLORS = { none:"#e5e7eb", review:"#f59e0b", ok:"#10b981", fail:"#ef4444", dark:"#0f172a", white:"#ffffff", border:"#cbd5e1" };
-  
-  // --- Funciones utilitarias ---
   function labelState(s){ return s==="ok"?"OK":s==="fail"?"Fallo":s==="pending"?"Por revisar":s==="auto"?"Auto":"—"; }
   function nsKey(a){ return "mh_v1_"+a+"_state"; }
   function hashPIN(pin){ var h=5381; for (var i=0;i<pin.length;i++){ h=((h<<5)+h)+pin.charCodeAt(i); h|=0; } return "h"+(h>>>0).toString(16); }
   function nowISO(){ var d=new Date(); function p(n){return String(n).padStart(2,"0");} return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes()); }
+
   function autoOverallFromRoom(room){
     var items = (room&&room.items)||{};
     var vals = Object.keys(items).map(function(k){return items[k]}).filter(function(v){return v!=="none"});
@@ -107,14 +67,13 @@
 
   var appState = {
     page: "plan",
-    selZone: null,     // Nivel 1: Residence, Villas, Leiro, etc.
-    selBlock: null,    // Nivel 2: Bloque A, V, BR-1, DR-3, LT-8, etc. (objeto completo)
+    selBlock: null,
     selRoom: null,
     filter: "",
     statusFilter: "all",
     users: loadUsers(),
     aliasLower: loadCurrent(),
-    dataByUser: {} 
+    dataByUser: {} // lazy-load por usuario
   };
 
   function getUserProfile(){ return appState.aliasLower ? appState.users[appState.aliasLower] : null; }
@@ -137,46 +96,23 @@
     var block=p[0]||null; var room=p[1]?Number(p[1]):null;
     return {page:"plan",block:block,room:room};
   }
-  
-  function setRouteTo(pg, room){
+  function setRouteTo(pg,room){
     if (pg==="parte"||pg==="cuenta"||pg==="auth"){ location.hash = "#/"+pg; return; }
-    var blockId = pg;
-    if (!blockId) location.hash=""; 
-    else if (!room) location.hash="#/"+blockId; 
-    else location.hash="#/"+blockId+"/"+room;
+    var block=pg;
+    if (!block) location.hash=""; else if (!room) location.hash="#/"+block; else location.hash="#/"+block+"/"+room;
   }
-  
   function applyRoute(){
     var r=parseHash();
     appState.page = getUserProfile()? r.page : "auth";
-    
     if (appState.page==="plan" && getUserProfile()){
-      if (!r.block){ 
-          appState.selZone=null; 
-          appState.selBlock=null; 
-          appState.selRoom=null; 
-      }
+      if (!r.block){ appState.selBlock=null; appState.selRoom=null; }
       else{
-        var b = getBlockById(r.block);
-        appState.selBlock=b||null; 
-        appState.selRoom=r.room||null;
-        
-        // Determinar la zona superior automáticamente
-        if (appState.selBlock) {
-            var zone = BLOQUES_AGRUPADOS.find(z => z.blocks.includes(appState.selBlock.id));
-            appState.selZone = zone ? zone.id : null;
-        } else {
-            appState.selZone = null;
-        }
+        var b=BLOQUES.find(function(x){return x.id===r.block;});
+        appState.selBlock=b||null; appState.selRoom=r.room||null;
       }
-    } else { 
-      appState.selZone=null; 
-      appState.selBlock=null; 
-      appState.selRoom=null; 
-    }
+    } else { appState.selBlock=null; appState.selRoom=null; }
     render();
   }
-  
   window.addEventListener("hashchange", applyRoute);
 
   // ---- DOM helpers ----
@@ -200,82 +136,40 @@
   // ---- Views ----
   function Header(){
     var actions=[];
-    
-    // Lógica de navegación DE VUELTA
-    if (appState.page==="plan"){
-        if (appState.selRoom!=null){
-          // Nivel 3: Habitación -> Nivel 2: Bloque/Planta
-          actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(appState.selBlock.id,null); }},'← Planta'));
-        } else if (appState.selBlock){
-          // Nivel 2: Bloque/Planta -> Nivel 1: Tipo de Zona
-          actions.push(el('button',{class:'btn-light',onclick:function(){ appState.selBlock=null; appState.selRoom=null; render(); }},'← Zonas'));
-        } else if (appState.selZone) {
-            // Nivel 1: Tipo de Zona -> Nivel 0: Plano General
-            actions.push(el('button',{class:'btn-light',onclick:function(){ appState.selZone=null; appState.selBlock=null; appState.selRoom=null; setRouteTo(null, null); }},'← Plano'));
-        }
-    } else if (appState.page==="parte" || appState.page==="cuenta"){
-        actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
+    if (appState.page==="parte"){
+      actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
+    } else if (appState.selRoom!=null){
+      actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(appState.selBlock.id,null); }},'← Residencias'));
+    } else if (appState.selBlock){
+      actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
     }
-
     actions.push(el('button',{class:'btn',onclick:function(){ setRouteTo("parte"); }},'Parte'));
     actions.push(el('button',{class:'btn-primary',onclick:function(){ setRouteTo("cuenta"); }}, getUserProfile()?("Usuario: "+getUserProfile().alias):"Acceder"));
-    
     return el('header',{class:'container'},
       el('h1',null,'Mantenimiento Hotel · Residences'),
       el('div',{class:'actions'}, actions)
     );
   }
 
-  function ZoneTile(item){
+  function BlockTile(b){
+    var rooms=[]; for(var i=b.from;i<=b.to;i++) rooms.push(i);
     var data=getUserData();
-    var rooms = [];
-    var blocksToProcess = [];
-    
-    var isZoneGroup = !!item.blocks;
-    if (isZoneGroup) {
-        // Nivel 1: Es un grupo (Zona)
-        blocksToProcess = item.blocks.map(getBlockById).filter(b => b);
-    } else {
-        // Nivel 2: Es un bloque/planta individual
-        blocksToProcess = [item];
-    }
-
-    blocksToProcess.forEach(b => {
-        for(var i=b.from; i<=b.to; i++) rooms.push(i);
-    });
-
     var overalls=rooms.map(function(n){ var r=data[n]; var o=(r && r.overall && r.overall!=="auto")? r.overall : (r?autoOverallFromRoom(r):"none"); return o; });
     var total=rooms.length;
     var fail=overalls.filter(function(x){return x==="fail"}).length;
     var rev=overalls.filter(function(x){return x==="pending"}).length;
     var ok=overalls.filter(function(x){return x==="ok"}).length;
     var none=overalls.filter(function(x){return x==="none"}).length;
-    
     var progress = el('div',{class:'progress',style:{marginTop:'8px'}},
       el('div',{style:{height:'100%',width:(fail/total*100)+'%',background:'#ef4444',float:'left'}}),
       el('div',{style:{height:'100%',width:(rev/total*100)+'%',background:'#f59e0b',float:'left'}}),
       el('div',{style:{height:'100%',width:(ok/total*100)+'%',background:'#10b981',float:'left'}})
     );
-    
-    var clickHandler;
-    var subtitle;
-    
-    if (isZoneGroup) {
-        // Clic en ZONA (Nivel 1) -> Pasar a Nivel 2 (Plantas/Bloques)
-        clickHandler = function(){ appState.selZone = item.id; appState.selBlock = null; render(); };
-        subtitle = `Total Habitaciones: ${total}`;
-    } else {
-        // Clic en BLOQUE/PLANTA (Nivel 2) -> Pasar a Nivel 3 (Habitaciones)
-        clickHandler = function(){ setRouteTo(item.id,null); };
-        subtitle = `Habitaciones: ${rooms[0]}–${rooms[rooms.length-1]}`;
-    }
-    
-    return el('button',{class:'tile',onclick:clickHandler},
+    return el('button',{class:'tile',onclick:function(){ setRouteTo(b.id,null); }},
       el('div',{style:{width:'100%'}},
-        el('div',{style:{fontSize:'24px'}}, item.icon || (item.id==="V"?"🏡":"🏢")),
-        el('div',null, item.label || item.id),
-        el('div',{class:'kv',style:{marginTop:'4px'}}, subtitle),
-        el('div',{class:'kv',style:{marginTop:'4px'}}, "Fallo: "+fail+" · Rev: "+rev+" · OK: "+ok),
+        el('div',{style:{fontSize:'24px'}}, b.id==="V"?"🏡":"🏢"),
+        el('div',null, b.label+" · "+rooms[0]+"–"+rooms[rooms.length-1]),
+        el('div',{class:'kv',style:{marginTop:'4px'}}, "Fallo: "+fail+" · Rev: "+rev+" · OK: "+ok+" · Sin marcar: "+none),
         progress
       )
     );
@@ -290,22 +184,168 @@
     var realBg=isNone?"#ffffff":bg;
     return el('button',{class:'room',style:{background:realBg,color:color,borderColor:border},onclick:function(){ setRouteTo(appState.selBlock.id,n); }}, String(n));
   }
+  
+  // --- FUNCIÓN MODIFICADA: Incluye campos de dificultad y costo ---
+  function MeasureForm(room){
+    var wrap = el('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}});
+    var sel = el('select',null,
+      el('option',{value:'madera'},'Madera'),
+      el('option',{value:'ceramica'},'Cerámica'),
+      el('option',{value:'mueble'},'Mueble'),
+      el('option',{value:'enser'},'Enser'),
+      el('option',{value:'otro'},'Otro')
+    );
+    var medida = el('input',{class:'small',placeholder:'Medida (ej. 60x90 cm)'});
+    var detalle = el('input',{class:'small',placeholder:'Detalle opcional'});
+    // NUEVOS CAMPOS: Dificultad y Costo Estimado
+    var difficulty = el('select',{class:'small'},
+        el('option',{value:''},'Dificultad...'),
+        el('option',{value:'Baja'},'Baja (Sencilla)'),
+        el('option',{value:'Media'},'Media (Técnico)'),
+        el('option',{value:'Alta'},'Alta (Especialista)'),
+    );
+    var cost = el('input',{class:'small',placeholder:'Costo Estimado (€)'});
+    
+    var btn = el('button',{class:'btn-primary',onclick:function(){
+      if(!medida.value.trim()) return;
+      var m={
+        tipo:sel.value,
+        medida:medida.value.trim(),
+        difficulty: difficulty.value, // Guardar dificultad
+        cost: cost.value.trim()       // Guardar costo
+      }; 
+      if(detalle.value.trim()) m.detalle=detalle.value.trim();
+      setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto"}; var next=Object.assign({},s); r.measures=(r.measures||[]).concat([m]); next[room]=r; return next; });
+      // Limpiar campos
+      medida.value=""; detalle.value=""; cost.value=""; difficulty.value=""; 
+    }},'Añadir');
+    
+    wrap.appendChild(sel); 
+    wrap.appendChild(medida); 
+    wrap.appendChild(detalle); 
+    wrap.appendChild(difficulty); // Añadir al DOM
+    wrap.appendChild(cost);       // Añadir al DOM
+    wrap.appendChild(btn);
+    return wrap;
+  }
+  
+  // --- FUNCIÓN MODIFICADA: ParteView con Dificultad y Costo ---
+  function ParteView(){
+    var byBlock={};
+    var data=getUserData();
+    BLOQUES.forEach(function(b){
+      var rooms=[]; for(var i=b.from;i<=b.to;i++) rooms.push(i);
+      var entries=[];
+      rooms.forEach(function(n){
+        var r=data[n]||{}; var items=r.items||{}; var itemNotes=r.itemNotes||{};
+        var fails=Object.keys(items).filter(function(k){return items[k]==='fail'});
+        var revs=Object.keys(items).filter(function(k){return items[k]==='pending'});
+        var detalle=[];
+        fails.forEach(function(k){ var lab=(CHECKS.find(function(c){return c.id===k})||{}).label||k; var note=(itemNotes[k]||"").trim(); detalle.push({tipo:"Fallo",item:k,label:lab+(note?(" — obs: "+note):"")}); });
+        revs.forEach(function(k){ var lab=(CHECKS.find(function(c){return c.id===k})||{}).label||k; var note=(itemNotes[k]||"").trim(); detalle.push({tipo:"Por revisar",item:k,label:lab+(note?(" — obs: "+note):"")}); });
+        var roomNote=(r.notes||"").trim();
+        var anyItemNoteOnly = Object.keys(itemNotes).some(function(k){ var v=(itemNotes[k]||"").trim(); var st=items[k]; return v.length>0 && (!st||st==='none'||st==='ok'); });
+        if (detalle.length===0 && (roomNote || anyItemNoteOnly)){
+          if (anyItemNoteOnly){
+            Object.keys(itemNotes).forEach(function(k){
+              var note=(itemNotes[k]||"").trim(); if(!note) return; var st=items[k];
+              if (!st||st==='none'||st==='ok'){ var lab=(CHECKS.find(function(c){return c.id===k})||{}).label||k; detalle.push({tipo:'Fallo',item:k,label:lab+' — obs: '+note}); }
+            });
+          }
+          if (roomNote){ detalle.push({tipo:'Fallo',item:'observacion_general',label:'Observación general — '+roomNote}); }
+        }
+        if (detalle.length || r.measures.length){ entries.push({room:n,detalle:detalle,measures:(r.measures||[]),notes:roomNote}); }
+      });
+      byBlock[b.id]=entries;
+    });
 
-  // --- FUNCIONES DE VISTAS (RESTAUARADAS/AÑADIDAS) ---
+    function onCSV(){
+      // Se mantiene el CSV simple, añadiendo Dificultad/Costo al campo de Medidas
+      var rows=[["Usuario","Bloque","Residencia","Tipo","Elemento","Detalle_Obs","Medidas_Sustituciones","Notas"]]; 
+      var alias=(getUserProfile()&&getUserProfile().alias)||'anon';
+      BLOQUES.forEach(function(b){
+        (byBlock[b.id]||[]).forEach(function(e){
+          // Lógica de generación de Medidas para CSV (incluyendo dificultad y costo)
+          var medidas=(e.measures||[]).map(function(m){
+            var mStr = "["+m.tipo+"] "+m.medida+(m.detalle?(" — "+m.detalle):"");
+            if(m.difficulty) mStr += " (Dificultad: " + m.difficulty + ")";
+            if(m.cost) mStr += " (Costo Est: " + m.cost + ")";
+            return mStr;
+          }).join(" | ");
+          
+          var notes=e.notes||"";
 
-  // Crea la herramienta para añadir una nueva incidencia (dropdown + botón)
-  function AddIncidencia(room, remainingChecks){
-    var sel = el('select',null);
-    remainingChecks.forEach(function(c){ sel.appendChild(el('option',{value:c.id},c.label)); });
-    var btn = el('button',{class:'btn-primary',disabled:remainingChecks.length===0,onclick:function(){
-      if(remainingChecks.length===0) return;
-      var id=sel.value;
-      setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]="fail"; var next=Object.assign({},s); next[room]=rr; return next; });
-    }},'Añadir incidencia');
-    return el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},sel,btn);
+          if (e.detalle.length===0){ 
+            rows.push([alias,b.id,String(e.room),"","","",medidas,notes]); 
+          }
+          else{
+            e.detalle.forEach(function(d){
+              var parts=d.label.split(" — obs: "); 
+              // Repetir la info de Medidas en cada fila de detalle
+              rows.push([alias,b.id,String(e.room),d.tipo,parts[0],parts[1]||"",medidas,notes]);
+            });
+          }
+        });
+      });
+      var csv=rows.map(function(r){ return r.map(function(x){ var s=(x==null?"":String(x)); return /[\",\n;]/.test(s)?('"'+s.replace(/\"/g,'""')+'"'):s; }).join(","); }).join("\n");
+      var blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+      var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="parte_"+(((getUserProfile()||{}).alias)||"anon")+"_"+nowISO().replace(/[: ]/g,'-')+".csv";
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    var main = el('main',{class:'container'},
+      el('div',{style:{display:'flex',gap:'8px',alignItems:'center',justifyContent:'space-between'}},
+        el('h2',null,'Parte de trabajo'),
+        el('div',null,
+          el('button',{class:'btn',onclick:function(){ window.print(); }},'Imprimir'),
+          el('button',{class:'btn-primary',style:{marginLeft:'8px'},onclick:onCSV},'Exportar CSV')
+        )
+      )
+    );
+
+    Object.keys(byBlock).forEach(function(bid){
+      var entries=byBlock[bid]; var section = el('section',{class:'card'},
+        el('h3',null,'Bloque '+(bid==='V'?'VILLAS':bid)),
+        entries.length===0 ? el('div',{class:'kv'},'Sin fallos, por revisar ni medidas registradas.') : el('div',null)
+      );
+      if (entries.length>0){
+        entries.sort(function(a,b){return a.room-b.room;}).forEach(function(e){
+          var item = el('div',{style:{margin:'8px 0',padding:'8px',border:'1px solid var(--b2)',borderRadius:'10px'}},
+            el('div',{style:{fontWeight:700}}, 'Residencia '+e.room),
+            el('ul',{style:{margin:'6px 0 0 18px'}},
+              e.detalle.map(function(d){ return el('li',null, d.tipo+': '+d.label); })
+            )
+          );
+          // Lógica de visualización de Medidas (incluyendo dificultad y costo)
+          if (e.measures && e.measures.length){
+            item.appendChild(el('div',{class:'kv',style:{marginTop:'6px'}}, 'Medidas: '+ e.measures.map(function(m){
+              var mStr = '['+m.tipo+'] '+m.medida+(m.detalle?(' — '+m.detalle):'');
+              if(m.difficulty) mStr += ' | Dificultad: ' + m.difficulty;
+              if(m.cost) mStr += ' | Costo Est: ' + m.cost;
+              return mStr;
+            }).join(' | ')));
+          }
+          if (e.notes){
+            item.appendChild(el('div',{class:'kv',style:{marginTop:'6px'}}, 'Notas: '+e.notes));
+          }
+          section.appendChild(item);
+        });
+      }
+      main.appendChild(section);
+    });
+
+    return main;
+  }
+  // --- FIN FUNCIÓN MODIFICADA: ParteView ---
+
+  function AddIncidencia(room, remaining){
+    var wrap = el('span',null);
+    var sel = el('select',null, remaining.length? remaining.map(function(c){ return el('option',{value:c.id},c.label); }) : [el('option',{value:''},'(Sin puntos disponibles)')]);
+    var btn = el('button',{class: remaining.length?'btn':'btn-disabled',onclick:function(){ if(!remaining.length) return; var id=sel.value; if(!id) return; setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; r.items[r.items[id]?'':id]="pending"; if(!r.items[id]) r.items[id]="pending"; var next=Object.assign({},s); next[room]=r; return next; }); }},'Añadir punto');
+    wrap.appendChild(sel); wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(btn);
+    return wrap;
   }
 
-  // Vista de la lista de incidencias activas para la habitación
   function IncidenciasView(room){
     var data=getUserData(); var r=data[room]||{}; var items=r.items||{}; var itemNotes=r.itemNotes||{};
 
@@ -359,173 +399,125 @@
     section.appendChild(grid);
     return section;
   }
-  
-  // Formulario para añadir nuevas medidas
-  function MeasureForm(room){
-    var wrap = el('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}});
-    var sel = el('select',null,
-      el('option',{value:'madera'},'Madera'),
-      el('option',{value:'ceramica'},'Cerámica'),
-      el('option',{value:'mueble'},'Mueble'),
-      el('option',{value:'enser'},'Enser'),
-      el('option',{value:'otro'},'Otro')
-    );
-    var medida = el('input',{class:'small',placeholder:'Medida (ej. 60x90 cm)'});
-    var detalle = el('input',{class:'small',placeholder:'Detalle opcional'});
-    var btn = el('button',{class:'btn-primary',onclick:function(){
-      if(!medida.value.trim()) return;
-      var m={tipo:sel.value,medida:medida.value.trim()}; if(detalle.value.trim()) m.detalle=detalle.value.trim();
-      setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto"}; var next=Object.assign({},s); r.measures=(r.measures||[]).concat([m]); next[room]=r; return next; });
-      medida.value=""; detalle.value="";
-    }},'Añadir');
-    wrap.appendChild(sel); wrap.appendChild(medida); wrap.appendChild(detalle); wrap.appendChild(btn);
-    return wrap;
-  }
 
-  // Vista de parte de incidencias (para copiar)
-  function ParteView(){
-    var u=getUserProfile();
-    var data=getUserData();
-    var rooms=Object.keys(data).filter(function(n){ return data[n] && (data[n].notes || Object.keys(data[n].measures||{}).length || Object.keys(data[n].itemNotes||{}).length || Object.keys(data[n].items||{}).filter(function(k){ return data[n].items[k]==='fail'||data[n].items[k]==='pending'}).length>0 || data[n].overall==='fail'); }).sort(function(a,b){return Number(a)-Number(b)});
-    
-    var list=el('ul',null);
-    rooms.forEach(function(n){
-      var r=data[n];
-      var checks = CHECKS.map(function(c){ var state=r.items[c.id]||"none"; var note=r.itemNotes[c.id]||""; return state!=="none"? `${c.label}: ${labelState(state)} ${note?'('+note+')':''}` : null; }).filter(Boolean).join('; ');
-      var measures = (r.measures||[]).map(function(m){ return `[${m.tipo}] ${m.medida}${m.detalle? ' - '+m.detalle:''}`; }).join('; ');
-      
-      list.appendChild(el('li',{style:{marginBottom:'12px',borderBottom:'1px dashed #ccc',paddingBottom:'8px'}},
-        el('h4',null, `Habitación ${n} (${labelState(r.overall||'auto')})`),
-        r.notes? el('p',{class:'kv'}, el('strong',null,'Notas generales: '), r.notes) : null,
-        checks? el('p',{class:'kv'}, el('strong',null,'Revisiones: '), checks) : null,
-        measures? el('p',{class:'kv'}, el('strong',null,'Medidas/Sustituciones: '), measures) : null
-      ));
-    });
-
-    var main = el('main',{class:'container',style:{whiteSpace:'pre-wrap'}},
-      el('h2',null, 'Parte de Mantenimiento'),
-      el('p',{class:'kv'}, 'Generado el: ', nowISO()),
-      el('p',{class:'kv'}, 'Usuario: ', u? u.alias : 'Desconocido'),
-      el('p',{class:'kv'}, 'Versión: ', APP_VERSION),
-      el('hr'),
-      rooms.length===0? el('p',null,'No hay incidencias o notas registradas.') : list,
-      el('hr'),
-      el('p',{class:'kv',style:{fontSize:'12px'}},'NOTA: Esta vista es para copiar y pegar la información en un documento o email. No está diseñada para impresión directa.')
-    );
-    return main;
-  }
-
-  // Vista de gestión de cuenta
   function CuentaView(){
-    var u=getUserProfile();
-    var main = el('main',{class:'container'},
-      el('h2',null,'Mi Cuenta'),
-      u? el('section',{class:'card'},
-        el('p',{class:'kv'}, 'Alias: ', u.alias),
-        el('p',{class:'kv'}, 'Hash PIN: ', u.hash),
-        el('button',{class:'btn-danger',onclick:function(){ setCurrent(null); appState.aliasLower=null; location.reload(); }},'Cerrar Sesión')
-      ) : el('p',null,'No has iniciado sesión.'),
-      el('h3',null,'Acerca de'),
-      el('p',{class:'kv'}, 'Versión: ', APP_VERSION)
-    );
-    return main;
-  }
-
-  // Vista de autenticación/login
-  function AuthView(){
-    var users=loadUsers();
-    var alias=el('input',{placeholder:'Tu Alias'});
-    var pin=el('input',{type:'password',placeholder:'PIN (4-6 dígitos)'});
-    var msg=el('p',{class:'kv'});
-
-    function login(){
-      var a=alias.value.trim().toLowerCase();
-      var p=pin.value.trim();
-      if (a===""||p.length<4){ msg.textContent="Alias o PIN inválidos."; return; }
-      if(users[a]){
-        if(users[a].hash===hashPIN(p)){
-          setCurrent(a);
-          appState.aliasLower=a;
-          appState.page="plan";
-          setRouteTo(null,null);
-        } else { msg.textContent="PIN incorrecto."; }
-      } else { 
-        if(confirm("El alias '"+alias.value.trim()+"' no existe. ¿Deseas crearlo ahora?")){
-          if(p.length<4||p.length>6){ msg.textContent="El PIN debe ser de 4 a 6 dígitos."; return; }
-          var newUser={alias:alias.value.trim(),hash:hashPIN(p)};
-          users[a]=newUser;
-          saveUsers(users);
-          setCurrent(a);
-          appState.aliasLower=a;
-          appState.page="plan";
-          setRouteTo(null,null);
-        }
-      }
+    var profile=getUserProfile();
+    function logout(){ setCurrent(null); appState.aliasLower=null; appState.page='auth'; render(); }
+    function onExport(){
+      var alias=(profile&&profile.alias)||'anon';
+      var data = localStorage.getItem(nsKey(appState.aliasLower)) || "{}";
+      var payload = { type:"mh-profile", version:APP_VERSION, alias:alias, storedAt: new Date().toISOString(), data: JSON.parse(data) };
+      var blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download="mh-"+alias+"-"+nowISO().replace(/[: ]/g,'-')+".mhjson"; document.body.appendChild(a); a.click(); a.remove();
     }
-    
+    function onImport(file){
+      var fr=new FileReader();
+      fr.onload=function(){
+        try{
+          var payload=JSON.parse(fr.result);
+          if (!payload || !payload.data){ alert("Archivo inválido"); return; }
+          localStorage.setItem(nsKey(appState.aliasLower), JSON.stringify(payload.data));
+          location.reload();
+        }catch(e){ alert("No se pudo importar"); }
+      };
+      fr.readAsText(file);
+    }
+    var fileInput = el('input',{type:'file',accept:'.mhjson,application/json',style:{display:'none'}});
+    fileInput.addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(f) onImport(f); });
+
     return el('main',{class:'container'},
-      el('h2',null,'Acceso'),
-      el('section',{class:'card'},
-        el('div',{style:{display:'flex',flexDirection:'column',gap:'10px'}},
-          alias, pin, msg,
-          el('button',{class:'btn-primary',onclick:login},'Acceder / Crear cuenta')
+      el('div',{class:'card'},
+        el('h3',null, 'Usuario actual: ', profile?profile.alias:"—"),
+        el('div',{class:'kv'},'Gestiona perfiles, copia de seguridad y migración.'),
+        el('div',{style:{marginTop:'10px',display:'flex',gap:'8px',flexWrap:'wrap'}},
+          el('button',{class:'btn',onclick:function(){ location.hash="#/auth"; }},'Cambiar usuario'),
+          el('button',{class:'btn',onclick:logout},'Cerrar sesión'),
+          el('button',{class:'btn',onclick:onExport},'Exportar datos (.mhjson)'),
+          fileInput,
+          el('button',{class:'btn',onclick:function(){ fileInput.click(); }},'Importar datos')
+        )
+      ),
+      el('div',{class:'card'},
+        el('h3',null,'Perfiles'),
+        el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
+          Object.values(loadUsers()).map(function(u){
+            return el('span',{class:'badge'}, u.alias, ' ', el('button',{class:'btn',style:{marginLeft:'8px'},onclick:function(){
+              var users=loadUsers(); if(!confirm('Eliminar perfil '+u.alias+'?')) return; delete users[u.alias.toLowerCase()]; saveUsers(users); if((profile&&profile.alias)===u.alias){ setCurrent(null); appState.aliasLower=null; location.hash="#/auth"; } render();
+            }}, 'Eliminar'));
+          })
         )
       )
     );
   }
 
-  // --- VISTA PRINCIPAL (MainView) ---
+  function AuthView(){
+    var users=loadUsers();
+    var alias=""; var pin=""; var msg="";
+    var main=el('main',{class:'container'},
+      el('div',{class:'card',style:{maxWidth:'440px',margin:'64px auto'}},
+        el('h2',null,'Acceder'),
+        el('div',{class:'kv'},'Perfiles locales. Alias + PIN de 4–8 dígitos.'),
+        (function(){
+          var box=el('div',{style:{display:'grid',gap:'8px',marginTop:'12px'}});
+          var a=el('input',{placeholder:'Alias (ej. Frank)'});
+          var p=el('input',{placeholder:'PIN',type:'password'});
+          var m=el('div',{style:{color:'#b91c1c'}});
+          var btn=el('button',{class:'btn-primary'},'Entrar / Crear perfil');
+          a.addEventListener('input',function(){ alias=a.value; });
+          p.addEventListener('input',function(){ pin=p.value; });
+          btn.addEventListener('click',function(){
+            var al=alias.trim(); var pi=pin.trim(); if(!al||!pi){ m.textContent="Alias y PIN requeridos"; return; }
+            var key=al.toLowerCase(); var u=users[key]; var h=hashPIN(pi);
+            if(!u){
+              users[key]={alias:al,pinHash:h,createdAt:new Date().toISOString()}; saveUsers(users);
+              try{ var legacy=localStorage.getItem(LEGACY); if(legacy && !localStorage.getItem(nsKey(key))){ localStorage.setItem(nsKey(key), legacy); localStorage.removeItem(LEGACY);} }catch(e){}
+              setCurrent(key); appState.aliasLower=key; location.hash=""; return;
+            }
+            if(u.pinHash!==h){ m.textContent="PIN incorrecto"; return; }
+            setCurrent(key); appState.aliasLower=key; location.hash=""; 
+          });
+          box.appendChild(a); box.appendChild(p); box.appendChild(btn); box.appendChild(m);
+          return box;
+        })(),
+        Object.values(users).length>0 ? el('div',{style:{marginTop:'12px'}},
+          el('div',{class:'kv'},'Perfiles existentes:'),
+          el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'6px'}},
+            Object.values(users).map(function(u){ var b=el('button',{class:'btn'},u.alias); b.addEventListener('click',function(){ alias=u.alias; document.activeElement.blur(); }); return b; })
+          )
+        ) : null
+      )
+    );
+    return main;
+  }
 
   function MainView(){
     var root = el('div',null,
       Header()
     );
 
-    // --- VISTAS ESPECIALES (Auth, Parte, Cuenta) ---
-    if (appState.page==="auth"){ root.appendChild(AuthView()); return root; }
-    if (appState.page==="cuenta"){ root.appendChild(CuentaView()); return root; }
-    if (appState.page==="parte"){ root.appendChild(ParteView()); return root; }
+    if (appState.page==="cuenta"){
+      root.appendChild(CuentaView());
+      return root;
+    }
+    if (appState.page==="parte"){
+      root.appendChild(ParteView());
+      return root;
+    }
 
-    // NIVEL 1: Selección de Zona
-    if (!appState.selZone){
+    if (!appState.selBlock){
       var plan = el('main',{class:'container'},
-        el('h2',null, 'Plano General'),
         el('div',{class:'plan'},
-          BLOQUES_AGRUPADOS.map(function(z){ return ZoneTile(z); })
+          BLOQUES.map(function(b){ return BlockTile(b); })
         ),
-        el('p',{class:'kv',style:{marginTop:'10px'}}, 'Usuario: ', (getUserProfile()?getUserProfile().alias:"—"), '. Pulsa una zona para ver el detalle.')
+        el('p',{class:'kv',style:{marginTop:'10px'}}, 'Usuario: ', (getUserProfile()?getUserProfile().alias:"—"), '. Pulsa un bloque para ver sus residencias.')
       );
       root.appendChild(plan);
       return root;
     }
 
-    // NIVEL 2: Detalle de Zona / Plantas
-    if (appState.selZone && appState.selBlock==null){
-        var zone = BLOQUES_AGRUPADOS.find(z => z.id === appState.selZone);
-        if (!zone) { appState.selZone=null; setRouteTo(null, null); return MainView(); }
-        
-        var main = el('main',{class:'container'},
-            el('h2',null, zone.label),
-            el('p',{class:'kv'}, 'Selecciona un bloque/planta para ver las habitaciones.')
-        );
-
-        var blocksToShow = zone.blocks.map(getBlockById).filter(b => b);
-
-        main.appendChild(el('div',{class:'plan'},
-            blocksToShow.map(function(b){ return ZoneTile(b); })
-        ));
-
-        root.appendChild(main);
-        return root;
-    }
-
-    // NIVEL 3: Habitaciones de un Bloque/Planta
     if (appState.selBlock && appState.selRoom==null){
       var b=appState.selBlock;
-      var rooms=[]; 
-      
-      for(var i=b.from;i<=b.to;i++) rooms.push(i);
-      
+      var rooms=[]; for(var i=b.from;i<=b.to;i++) rooms.push(i);
       var data=getUserData();
       function roomOverall(n){ var r=data[n]||{}; return (r.overall && r.overall!=="auto")? r.overall : autoOverallFromRoom(r); }
       var filtered = rooms.filter(function(n){
@@ -533,13 +525,11 @@
         if (appState.statusFilter==="all") return true;
         return roomOverall(n)===appState.statusFilter;
       });
-      
       var main = el('main',{class:'container'},
-        el('h2',null, 'Residencias en '+b.label),
+        el('h2',null, 'Bloque '+b.label),
         (function(){
           var tb=el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',margin:'8px 0'}});
-          var inp=el('input',{placeholder:'Filtrar número…', value: appState.filter}); 
-          inp.addEventListener('input',function(){ appState.filter=inp.value; render(); });
+          var inp=el('input',{placeholder:'Filtrar número…'}); inp.addEventListener('input',function(){ appState.filter=inp.value; render(); });
           tb.appendChild(inp);
           ['all','fail','pending','ok','none'].forEach(function(s){
             var btn=el('span',{class: 'badge'+(appState.statusFilter===s?' active':''),onclick:function(){ appState.statusFilter=s; render(); }}, s);
@@ -549,84 +539,87 @@
         })(),
         el('div',{class:'rooms'},
           filtered.map(function(n){ return RoomChip(n); })
-        ),
-        filtered.length === 0 ? el('p',{class:'kv',style:{marginTop:'12px'}}, 'No se encontraron residencias con el filtro aplicado.') : null
+        )
       );
       root.appendChild(main);
       return root;
     }
 
-    // NIVEL 4: Detalle de Habitación
     if (appState.selRoom!=null){
-       var n=appState.selRoom; var data=getUserData(); var r=data[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"none",assumeOk:false};
-       var overall = (r.overall && r.overall!=="auto")? r.overall : autoOverallFromRoom(r);
- 
-       function resetRoom(){
-         setUserData(function(s){ var next=Object.assign({},s); next[n]={items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; return next; });
-       }
-       function toggleAssumeOk(){
-         setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.assumeOk=!rr.assumeOk; var next=Object.assign({},s); next[n]=rr; return next; });
-       }
-       function setOverallState(val){
-         setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.overall=val; var next=Object.assign({},s); next[n]=rr; return next; });
-       }
-       function setNotes(val){
-         setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.notes=val; var next=Object.assign({},s); next[n]=rr; return next; });
-       }
- 
-       var main = el('main',{class:'container'},
-         el('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}},
-           el('h2',null, 'Residencia ', String(n)),
-           el('span',{class:'badge',style:{marginLeft:'auto',background:overall==="auto"?"#334155":(overall==="ok"?COLORS.ok:overall==="fail"?COLORS.fail:overall==="pending"?COLORS.review:COLORS.none),color:"#fff"}}, labelState(overall)),
-           el('button',{class:'btn',onclick:toggleAssumeOk}, r.assumeOk?'Asumir resto OK: Sí':'Asumir resto OK: No'),
-           el('button',{class:'btn-danger',onclick:resetRoom}, 'Reiniciar habitación')
-         ),
-         IncidenciasView(n),
-         el('section',{class:'card'},
-           el('h3',null,'Medidas para sustituciones'),
-           MeasureForm(n),
-           (function(){
-             var list = el('ul',{style:{marginTop:'8px',paddingLeft:'18px'}});
-             var arr = (r.measures||[]);
-             if (!arr.length){ list.appendChild(el('li',{class:'kv'},'Sin medidas aún.')); return list; }
-             arr.forEach(function(m,idx){
-               var li=el('li',{style:{marginBottom:'4px'}},
-                 el('span',{style:{fontFamily:'monospace'}}, '['+m.tipo+'] '+m.medida),
-                 m.detalle? el('span',null,' — '+m.detalle): null,
-                 el('button',{class:'btn',style:{marginLeft:'8px'},onclick:function(){
-                   setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.measures=(rr.measures||[]).filter(function(_,i){return i!==idx}); var next=Object.assign({},s); next[n]=rr; return next; });
-                 }}, 'Eliminar')
-               );
-               list.appendChild(li);
-             });
-             return list;
-           })()
-         ),
-         el('section',{class:'card'},
-           el('h3',null,'Observaciones'),
-           (function(){
-             var ta=el('textarea',{style:{width:'100%',minHeight:'90px'}});
-             ta.value=r.notes||""; ta.addEventListener('input', function(){ setNotes(ta.value); });
-             return ta;
-           })()
-         ),
-         el('section',{class:'container',style:{paddingLeft:0}},
-           el('span',null,'Estado global: '),
-           ['ok','fail','pending','auto'].map(function(s){
-             var btn=el('span',{class:'badge',onclick:function(){ setOverallState(s); }}, labelState(s));
-             return btn;
-           })
-         ),
-         el('footer',{class:'container kv'}, APP_VERSION)
-       );
-       root.appendChild(main);
-       return root;
+      var n=appState.selRoom; var data=getUserData(); var r=data[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"none",assumeOk:false};
+      var overall = (r.overall && r.overall!=="auto")? r.overall : autoOverallFromRoom(r);
+
+      function markAllOk(){
+        setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; CHECKS.forEach(function(c){ rr.items[c.id]='ok'; }); var next=Object.assign({},s); next[n]=rr; return next; });
+      }
+      function resetRoom(){
+        setUserData(function(s){ var next=Object.assign({},s); next[n]={items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; return next; });
+      }
+      function toggleAssumeOk(){
+        setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.assumeOk=!rr.assumeOk; var next=Object.assign({},s); next[n]=rr; return next; });
+      }
+      function setOverallState(val){
+        setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.overall=val; var next=Object.assign({},s); next[n]=rr; return next; });
+      }
+      function setNotes(val){
+        setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.notes=val; var next=Object.assign({},s); next[n]=rr; return next; });
+      }
+
+      var main = el('main',{class:'container'},
+        el('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}},
+          el('h2',null, 'Residencia ', String(n)),
+          el('span',{class:'badge',style:{marginLeft:'auto',background:overall==="auto"?"#334155":(overall==="ok"?COLORS.ok:overall==="fail"?COLORS.fail:overall==="pending"?COLORS.review:COLORS.none),color:"#fff"}}, labelState(overall)),
+          el('button',{class:'btn',onclick:toggleAssumeOk}, r.assumeOk?'Asumir resto OK: Sí':'Asumir resto OK: No'),
+          el('button',{class:'btn-danger',onclick:resetRoom}, 'Reiniciar habitación')
+        ),
+        IncidenciasView(n),
+        el('section',{class:'card'},
+          el('h3',null,'Medidas para sustituciones'),
+          MeasureForm(n),
+          (function(){
+            var list = el('ul',{style:{marginTop:'8px',paddingLeft:'18px'}});
+            var arr = (r.measures||[]);
+            if (!arr.length){ list.appendChild(el('li',{class:'kv'},'Sin medidas aún.')); return list; }
+            arr.forEach(function(m,idx){
+              var li=el('li',{style:{marginBottom:'4px'}},
+                el('span',{style:{fontFamily:'monospace'}}, '['+m.tipo+'] '+m.medida),
+                m.detalle? el('span',null,' — '+m.detalle): null,
+                m.difficulty? el('span',null,' | Dificultad: '+m.difficulty): null, // Mostrar dificultad
+                m.cost? el('span',null,' | Costo Est: '+m.cost): null,               // Mostrar costo
+                el('button',{class:'btn',style:{marginLeft:'8px'},onclick:function(){
+                  setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.measures=(rr.measures||[]).filter(function(_,i){return i!==idx}); var next=Object.assign({},s); next[n]=rr; return next; });
+                }}, 'Eliminar')
+              );
+              list.appendChild(li);
+            });
+            return list;
+          })()
+        ),
+        el('section',{class:'card'},
+          el('h3',null,'Observaciones'),
+          (function(){
+            var ta=el('textarea',{style:{width:'100%',minHeight:'90px'}});
+            ta.value=r.notes||""; ta.addEventListener('input', function(){ setNotes(ta.value); });
+            return ta;
+          })()
+        ),
+        el('section',{class:'container',style:{paddingLeft:0}},
+          el('span',null,'Estado global: '),
+          ['ok','fail','pending','auto'].map(function(s){
+            var btn=el('span',{class:'badge',onclick:function(){ setOverallState(s); }}, labelState(s));
+            return btn;
+          })
+        ),
+        el('footer',{class:'container kv'}, APP_VERSION)
+      );
+      root.appendChild(main);
+      return root;
     }
 
     return root;
   }
 
-  // ---- Render & Boot ----
+  // ---- Render ----
   function render(){
     try{
       var root = document.getElementById('app');
@@ -637,6 +630,7 @@
     }catch(e){ showError(e); }
   }
 
+  // ---- Boot ----
   applyRoute();
   render();
 })();
