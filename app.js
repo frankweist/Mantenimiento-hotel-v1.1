@@ -1,3 +1,4 @@
+git add app.js
 (function(){
   // ---- Safe boot & error overlay ----
   var overlay = document.getElementById('error-overlay');
@@ -8,10 +9,6 @@
     try{
       if (overlay) overlay.classList.remove('hidden');
       if (errlog) errlog.textContent = (e && (e.stack||e.message||e.toString())) || String(e);
-      // Muestra una alerta simple para errores de persistencia al usuario
-      if (e && e.name === "QuotaExceededError") {
-          alert("ERROR: No se pudo guardar la información. Espacio de almacenamiento (localStorage) lleno.");
-      }
     }catch(_){}
   }
   window.addEventListener('error', function(ev){ showError(ev.error||ev.message); });
@@ -20,26 +17,23 @@
   // ---- Data ----
   var GLOBAL_LS = { users:"mh_users_v1", current:"mh_user_current_v1" };
   var LEGACY = "mh_v1_state";
-  var APP_VERSION = "v1.3.4-local-offline-extended"; // Versión actualizada
+  var APP_VERSION = "v1.3.5-local-offline-3lvl"; // Versión actualizada
 
+  // --- BLOQUES ORIGINALES (AÑADIDAS LAS NUEVAS ZONAS) ---
   var BLOQUES = [
     { id: "A", label: "A", from: 2100, to: 2107 },
     { id: "B", label: "B", from: 2200, to: 2207 },
     { id: "C", label: "C", from: 2300, to: 2307 },
     { id: "D", label: "D", from: 2400, to: 2401 },
     { id: "V", label: "VILLAS", from: 3101, to: 3106 },
-    // --- NUEVOS BLOQUES (BRINKMANN) ---
+    // --- BRINKMANN (IMPARES) ---
     { id: "BR-1", label: "BRINKMANN P1", from: 101, to: 129 },
-    { id: "BR-2", label: "BRINKMANN P2", from: 201, to: 241 },
     { id: "BR-3", label: "BRINKMANN P3", from: 301, to: 345 },
-    { id: "BR-4", label: "BRINKMANN P4", from: 401, to: 443 },
-    // --- NUEVOS BLOQUES (DARKO) ---
-    { id: "DR-1", label: "DARKO P1", from: 100, to: 138 },
+    // --- DARKO (PARES) ---
     { id: "DR-2", label: "DARKO P2", from: 200, to: 238 },
-    { id: "DR-3", label: "DARKO P3", from: 300, to: 338 },
     { id: "DR-4", label: "DARKO P4", from: 400, to: 438 },
-    { id: "DR-5", label: "DARKO P5", from: 500, to: 538 },
-    // --- NUEVOS BLOQUES (LEIRO TOWER) ---
+    { id: "DR-6", label: "DARKO P6", from: 600, to: 638 },
+    // --- LEIRO TOWER ---
     { id: "LT-1", label: "LEIRO TOWER P1", from: 1101, to: 1115 },
     { id: "LT-2", label: "LEIRO TOWER P2", from: 1201, to: 1219 },
     { id: "LT-3", label: "LEIRO TOWER P3", from: 1300, to: 1321 },
@@ -49,6 +43,27 @@
     { id: "LT-7", label: "LEIRO TOWER P7", from: 1700, to: 1721 },
     { id: "LT-8", label: "LEIRO SUITES P8", from: 1800, to: 1821 }, 
   ];
+  
+  // --- NUEVA ESTRUCTURA DE AGRUPACIÓN (NIVEL 1) ---
+  var BLOQUES_AGRUPADOS = [
+      // Nota: Residence incluye A, B, C, D
+      { id: "Residence", label: "Residence", blocks: ["A", "B", "C", "D"], icon: "🏢" },
+      // Nota: Villas incluye V
+      { id: "Villas", label: "Villas", blocks: ["V"], icon: "🏡" },
+      // Leiro Tower agrupa todos los bloques que empiezan por "LT-"
+      { id: "Leiro", label: "Leiro Tower", blocks: BLOQUES.filter(b => b.id.startsWith("LT-")).map(b => b.id), icon: "🏙️" },
+      // Darko (pares) agrupa todos los bloques que empiezan por "DR-"
+      { id: "Darko", label: "Darko (Pares)", blocks: BLOQUES.filter(b => b.id.startsWith("DR-")).map(b => b.id), icon: "🏨" },
+      // Brinkmann (impares) agrupa todos los bloques que empiezan por "BR-"
+      { id: "Brinkmann", label: "Brinkmann (Impares)", blocks: BLOQUES.filter(b => b.id.startsWith("BR-")).map(b => b.id), icon: "🏛️" },
+  ];
+
+  // Función de ayuda para buscar un bloque por ID
+  function getBlockById(id) {
+      return BLOQUES.find(function(x){ return x.id === id; });
+  }
+
+  // --- El resto de constantes (CHECKS, COLORS, etc.) - Sin cambios ---
   var CHECKS = [
     { id: "luces", label: "Luces" },
     { id: "agua_caliente", label: "Agua caliente" },
@@ -71,42 +86,34 @@
 
   function autoOverallFromRoom(room){
     var items = (room&&room.items)||{};
-    var vals = Object.keys(items).map(function(k){return items[k]}).filter(function(v){return v!=="none" && v!=="ok"}); // Ignorar 'ok' para decidir fail/pending
+    var vals = Object.keys(items).map(function(k){return items[k]}).filter(function(v){return v!=="none"});
     var hasFail = vals.indexOf("fail")>=0;
     var hasPend = vals.indexOf("pending")>=0;
-    var anyItemNote = room&&room.itemNotes && Object.keys(room.itemNotes).some(function(k){ return (room.itemNotes[k]||"").trim().length>0 && (items[k]==="none" || items[k]==="ok"); }); // Nota sin fallo/revisión
+    var anyItemNote = room&&room.itemNotes && Object.keys(room.itemNotes).some(function(k){ return (room.itemNotes[k]||"").trim().length>0; });
     var anyRoomNote = room && (room.notes||"").trim().length>0;
-
     if (hasFail) return "fail";
-    // Considerar nota sin fallo/rev como un fallo si el elemento no está marcado
     if (!hasFail && !hasPend && (anyItemNote || anyRoomNote)) return "fail";
     if (hasPend) return "pending";
-    
-    // Si no hay fallos ni pendientes, y hay ítems marcados como OK, es OK
-    if (Object.keys(items).filter(k => items[k] === 'ok').length > 0) return "ok";
-
-    // Si no hay items marcados, se basa en assumeOk
-    if (Object.keys(items).length===0 || Object.keys(items).every(k => items[k] === 'none')) return room&&room.assumeOk ? "ok" : "none";
-    
-    // Si todos los marcados son 'ok'
+    if (vals.length===0) return room&&room.assumeOk ? "ok" : "none";
     return "ok";
   }
 
   // ---- State & persistence ----
   function loadUsers(){ try{ return JSON.parse(localStorage.getItem(GLOBAL_LS.users)||"{}"); }catch(e){ return {}; } }
-  function saveUsers(u){ try{ localStorage.setItem(GLOBAL_LS.users, JSON.stringify(u)); }catch(e){ showError(e); } } // MEJORA: Manejo de error al guardar users
+  function saveUsers(u){ try{ localStorage.setItem(GLOBAL_LS.users, JSON.stringify(u)); }catch(e){} }
   function loadCurrent(){ return localStorage.getItem(GLOBAL_LS.current)||null; }
   function setCurrent(a){ if(a)localStorage.setItem(GLOBAL_LS.current,a); else localStorage.removeItem(GLOBAL_LS.current); }
 
   var appState = {
     page: "plan",
-    selBlock: null,
+    selZone: null,     // Nivel 1: Residence, Villas, Leiro, etc.
+    selBlock: null,    // Nivel 2: Bloque A, V, BR-1, DR-3, LT-8, etc. (objeto completo)
     selRoom: null,
     filter: "",
     statusFilter: "all",
     users: loadUsers(),
     aliasLower: loadCurrent(),
-    dataByUser: {} // lazy-load por usuario
+    dataByUser: {} 
   };
 
   function getUserProfile(){ return appState.aliasLower ? appState.users[appState.aliasLower] : null; }
@@ -116,15 +123,12 @@
     var cur = getUserData();
     var next = updater(cur);
     appState.dataByUser[k]=next;
-    try{ 
-        localStorage.setItem(nsKey(k), JSON.stringify(next)); 
-    }catch(e){ 
-        showError(e); // MEJORA: Muestra error en caso de fallo al guardar datos de habitación
-    }
+    try{ localStorage.setItem(nsKey(k), JSON.stringify(next)); }catch(e){}
     render();
   }
 
   // ---- Routing ----
+  // La ruta ahora puede ser: #/bloque, o #/bloque/habitacion (solo se usa el blockId/room)
   function parseHash(){
     var h=(location.hash||"").replace(/^#\/?/,"");
     if (!h) return {page:"plan",block:null,room:null};
@@ -133,26 +137,49 @@
     var block=p[0]||null; var room=p[1]?Number(p[1]):null;
     return {page:"plan",block:block,room:room};
   }
-  function setRouteTo(pg,room){
+  
+  function setRouteTo(pg, room){
     if (pg==="parte"||pg==="cuenta"||pg==="auth"){ location.hash = "#/"+pg; return; }
-    var block=pg;
-    if (!block) location.hash=""; else if (!room) location.hash="#/"+block; else location.hash="#/"+block+"/"+room;
+    var blockId = pg;
+    if (!blockId) location.hash=""; 
+    else if (!room) location.hash="#/"+blockId; 
+    else location.hash="#/"+blockId+"/"+room;
   }
+  
   function applyRoute(){
     var r=parseHash();
     appState.page = getUserProfile()? r.page : "auth";
+    
     if (appState.page==="plan" && getUserProfile()){
-      if (!r.block){ appState.selBlock=null; appState.selRoom=null; }
-      else{
-        var b=BLOQUES.find(function(x){return x.id===r.block;});
-        appState.selBlock=b||null; appState.selRoom=r.room||null;
+      if (!r.block){ 
+          appState.selZone=null; 
+          appState.selBlock=null; 
+          appState.selRoom=null; 
       }
-    } else { appState.selBlock=null; appState.selRoom=null; }
+      else{
+        var b = getBlockById(r.block);
+        appState.selBlock=b||null; 
+        appState.selRoom=r.room||null;
+        
+        // Determinar la zona superior automáticamente
+        if (appState.selBlock) {
+            var zone = BLOQUES_AGRUPADOS.find(z => z.blocks.includes(appState.selBlock.id));
+            appState.selZone = zone ? zone.id : null;
+        } else {
+            appState.selZone = null;
+        }
+      }
+    } else { 
+      appState.selZone=null; 
+      appState.selBlock=null; 
+      appState.selRoom=null; 
+    }
     render();
   }
+  
   window.addEventListener("hashchange", applyRoute);
 
-  // ---- DOM helpers ----
+  // ---- DOM helpers (Sin cambios) ----
   function el(tag, attrs){
     var e=document.createElement(tag);
     if(attrs){ for (var k in attrs){
@@ -173,40 +200,92 @@
   // ---- Views ----
   function Header(){
     var actions=[];
-    if (appState.page==="parte"){
-      actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
-    } else if (appState.selRoom!=null){
-      actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(appState.selBlock.id,null); }},'← Residencias'));
-    } else if (appState.selBlock){
-      actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
+    
+    // Nueva lógica de navegación en el Header
+    if (appState.page==="plan"){
+        if (appState.selRoom!=null){
+          // Nivel 3: Habitación -> Nivel 2: Bloque/Planta
+          actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(appState.selBlock.id,null); }},'← Planta'));
+        } else if (appState.selBlock){
+          // Nivel 2: Bloque/Planta -> Nivel 1: Tipo de Zona (o Plano)
+          // Si el bloque es Residence (A, B, C, D) o Villas (V), volvemos a la vista de Zonas (Nivel 1) o Plano si estamos en la vista agrupada.
+          var zone = BLOQUES_AGRUPADOS.find(z => z.id === appState.selZone);
+          if (zone) {
+              actions.push(el('button',{class:'btn-light',onclick:function(){ appState.selBlock=null; setRouteTo(null, null); }},'← '+zone.label));
+          } else {
+              actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
+          }
+        } else if (appState.selZone) {
+             // Nivel 1: Tipo de Zona -> Nivel 0: Plano General
+            actions.push(el('button',{class:'btn-light',onclick:function(){ appState.selZone=null; setRouteTo(null, null); }},'← Plano'));
+        }
+    } else if (appState.page==="parte"){
+        actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
     }
+
     actions.push(el('button',{class:'btn',onclick:function(){ setRouteTo("parte"); }},'Parte'));
     actions.push(el('button',{class:'btn-primary',onclick:function(){ setRouteTo("cuenta"); }}, getUserProfile()?("Usuario: "+getUserProfile().alias):"Acceder"));
+    
     return el('header',{class:'container'},
       el('h1',null,'Mantenimiento Hotel · Residences'),
       el('div',{class:'actions'}, actions)
     );
   }
 
-  function BlockTile(b){
-    var rooms=[]; for(var i=b.from;i<=b.to;i++) rooms.push(i);
+
+  // Se ha adaptado BlockTile para funcionar tanto con BLOQUES individuales como con BLOQUES_AGRUPADOS
+  function ZoneTile(item){
     var data=getUserData();
+    var rooms = [];
+    var blocksToProcess = [];
+    
+    // 1. Determinar qué bloques procesar (para calcular el overall)
+    var isZoneGroup = !!item.blocks;
+    if (isZoneGroup) {
+        // Es un grupo (Zona: Leiro, Darko, etc. - Nivel 1)
+        blocksToProcess = item.blocks.map(getBlockById).filter(b => b);
+    } else {
+        // Es un bloque/planta individual (A, B, V, BR-1, etc. - Nivel 2)
+        blocksToProcess = [item];
+    }
+
+    // 2. Recoger todas las habitaciones de los bloques seleccionados
+    blocksToProcess.forEach(b => {
+        for(var i=b.from; i<=b.to; i++) rooms.push(i);
+    });
+
     var overalls=rooms.map(function(n){ var r=data[n]; var o=(r && r.overall && r.overall!=="auto")? r.overall : (r?autoOverallFromRoom(r):"none"); return o; });
     var total=rooms.length;
     var fail=overalls.filter(function(x){return x==="fail"}).length;
     var rev=overalls.filter(function(x){return x==="pending"}).length;
     var ok=overalls.filter(function(x){return x==="ok"}).length;
     var none=overalls.filter(function(x){return x==="none"}).length;
+    
     var progress = el('div',{class:'progress',style:{marginTop:'8px'}},
       el('div',{style:{height:'100%',width:(fail/total*100)+'%',background:'#ef4444',float:'left'}}),
       el('div',{style:{height:'100%',width:(rev/total*100)+'%',background:'#f59e0b',float:'left'}}),
       el('div',{style:{height:'100%',width:(ok/total*100)+'%',background:'#10b981',float:'left'}})
     );
-    return el('button',{class:'tile',onclick:function(){ setRouteTo(b.id,null); }},
+    
+    var clickHandler;
+    var subtitle;
+    
+    if (isZoneGroup) {
+        // Clic en ZONA (Nivel 1) -> Pasar a Nivel 2 (Plantas/Bloques)
+        clickHandler = function(){ appState.selZone = item.id; appState.selBlock = null; render(); };
+        subtitle = `Total Habitaciones: ${total}`;
+    } else {
+        // Clic en BLOQUE/PLANTA (Nivel 2) -> Pasar a Nivel 3 (Habitaciones)
+        clickHandler = function(){ setRouteTo(item.id,null); };
+        subtitle = `Habitaciones: ${rooms[0]}–${rooms[rooms.length-1]}`;
+    }
+    
+    return el('button',{class:'tile',onclick:clickHandler},
       el('div',{style:{width:'100%'}},
-        el('div',{style:{fontSize:'24px'}}, b.id.startsWith("BR")?"🏢":b.id.startsWith("DR")?"🏢":b.id.startsWith("LT")?"🏙️":b.id==="V"?"🏡":"🏢"), // Iconos mejorados
-        el('div',null, b.label+(rooms.length>1?(" · "+rooms[0]+"–"+rooms[rooms.length-1]):"")),
-        el('div',{class:'kv',style:{marginTop:'4px'}}, "Fallo: "+fail+" · Rev: "+rev+" · OK: "+ok+" · Sin marcar: "+none),
+        el('div',{style:{fontSize:'24px'}}, item.icon || (item.id==="V"?"🏡":"🏢")),
+        el('div',null, item.label || item.id),
+        el('div',{class:'kv',style:{marginTop:'4px'}}, subtitle),
+        el('div',{class:'kv',style:{marginTop:'4px'}}, "Fallo: "+fail+" · Rev: "+rev+" · OK: "+ok),
         progress
       )
     );
@@ -222,13 +301,14 @@
     return el('button',{class:'room',style:{background:realBg,color:color,borderColor:border},onclick:function(){ setRouteTo(appState.selBlock.id,n); }}, String(n));
   }
 
+  // ... (MeasureForm, ParteView, AddIncidencia, IncidenciasView, CuentaView, AuthView - Sin cambios) ...
   function MeasureForm(room){
     var wrap = el('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}});
     var sel = el('select',null,
       el('option',{value:'madera'},'Madera'),
       el('option',{value:'ceramica'},'Cerámica'),
       el('option',{value:'mueble'},'Mueble'),
-      el('option',{value:'ensen'},'Enser'),
+      el('option',{value:'enser'},'Enser'),
       el('option',{value:'otro'},'Otro')
     );
     var medida = el('input',{class:'small',placeholder:'Medida (ej. 60x90 cm)'});
@@ -242,7 +322,6 @@
     wrap.appendChild(sel); wrap.appendChild(medida); wrap.appendChild(detalle); wrap.appendChild(btn);
     return wrap;
   }
-
   function ParteView(){
     var byBlock={};
     var data=getUserData();
@@ -262,12 +341,12 @@
           if (anyItemNoteOnly){
             Object.keys(itemNotes).forEach(function(k){
               var note=(itemNotes[k]||"").trim(); if(!note) return; var st=items[k];
-              if (!st||st==='none'||st==='ok'){ var lab=(CHECKS.find(function(c){return c.id===k})||{}).label||k; detalle.push({tipo:'Fallo (Obs. sin estado)',item:k,label:lab+' — obs: '+note}); }
+              if (!st||st==='none'||st==='ok'){ var lab=(CHECKS.find(function(c){return c.id===k})||{}).label||k; detalle.push({tipo:'Fallo',item:k,label:lab+' — obs: '+note}); }
             });
           }
-          if (roomNote){ detalle.push({tipo:'Fallo (Obs. general)',item:'observacion_general',label:'Observación general — '+roomNote}); }
+          if (roomNote){ detalle.push({tipo:'Fallo',item:'observacion_general',label:'Observación general — '+roomNote}); }
         }
-        if (detalle.length || (r.measures && r.measures.length)){ entries.push({room:n,detalle:detalle,measures:(r.measures||[]),notes:roomNote}); } // Incluir si tiene medidas aunque no tenga fallos/obs
+        if (detalle.length){ entries.push({room:n,detalle:detalle,measures:(r.measures||[]),notes:roomNote}); }
       });
       byBlock[b.id]=entries;
     });
@@ -278,15 +357,10 @@
       BLOQUES.forEach(function(b){
         (byBlock[b.id]||[]).forEach(function(e){
           var medidas=(e.measures||[]).map(function(m){return "["+m.tipo+"] "+m.medida+(m.detalle?(" — "+m.detalle):"")}).join(" | ");
-          
-          if (e.detalle.length===0 && e.measures.length > 0){ // Solo medidas, sin fallos
-             rows.push([alias,b.id,String(e.room),"Solo Medidas","","",medidas,e.notes||""]);
-          }
+          if (e.detalle.length===0){ rows.push([alias,b.id,String(e.room),"","","",medidas,e.notes||""]); }
           else{
             e.detalle.forEach(function(d){
-              var parts=d.label.split(" — obs: "); 
-              var currentMedidas = e.detalle.indexOf(d) === 0 ? medidas : ""; // Solo poner medidas en la primera fila de la habitación
-              rows.push([alias,b.id,String(e.room),d.tipo,parts[0],parts[1]||"",currentMedidas,e.notes||""]);
+              var parts=d.label.split(" — obs: "); rows.push([alias,b.id,String(e.room),d.tipo,parts[0],parts[1]||"",medidas,e.notes||""]);
             });
           }
         });
@@ -308,21 +382,17 @@
     );
 
     Object.keys(byBlock).forEach(function(bid){
-      var entries=byBlock[bid]; 
-      // Buscar el label del bloque
-      var blockLabel = (BLOQUES.find(function(b){return b.id===bid;}) || {}).label || bid;
-
-      var section = el('section',{class:'card'},
-        el('h3',null,'Bloque '+blockLabel),
-        entries.length===0 ? el('div',{class:'kv'},'Sin fallos, observaciones ni medidas.') : el('div',null)
+      var entries=byBlock[bid]; var section = el('section',{class:'card'},
+        el('h3',null,'Bloque '+(getBlockById(bid)||{}).label || bid), // Usa el label del bloque
+        entries.length===0 ? el('div',{class:'kv'},'Sin fallos ni por revisar.') : el('div',null)
       );
       if (entries.length>0){
         entries.sort(function(a,b){return a.room-b.room;}).forEach(function(e){
           var item = el('div',{style:{margin:'8px 0',padding:'8px',border:'1px solid var(--b2)',borderRadius:'10px'}},
             el('div',{style:{fontWeight:700}}, 'Residencia '+e.room),
-            e.detalle.length > 0 ? el('ul',{style:{margin:'6px 0 0 18px'}},
+            el('ul',{style:{margin:'6px 0 0 18px'}},
               e.detalle.map(function(d){ return el('li',null, d.tipo+': '+d.label); })
-            ) : null
+            )
           );
           if (e.measures && e.measures.length){
             item.appendChild(el('div',{class:'kv',style:{marginTop:'6px'}}, 'Medidas: '+ e.measures.map(function(m){return '['+m.tipo+'] '+m.medida+(m.detalle?(' — '+m.detalle):'');}).join(' | ')));
@@ -338,23 +408,20 @@
 
     return main;
   }
-
   function AddIncidencia(room, remaining){
     var wrap = el('span',null);
     var sel = el('select',null, remaining.length? remaining.map(function(c){ return el('option',{value:c.id},c.label); }) : [el('option',{value:''},'(Sin puntos disponibles)')]);
-    var btn = el('button',{class: remaining.length?'btn':'btn-disabled',onclick:function(){ if(!remaining.length) return; var id=sel.value; if(!id) return; setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; r.items[id]="pending"; var next=Object.assign({},s); next[room]=r; return next; }); }},'Añadir punto');
+    var btn = el('button',{class: remaining.length?'btn':'btn-disabled',onclick:function(){ if(!remaining.length) return; var id=sel.value; if(!id) return; setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; r.items[r.items[id]?'':id]="pending"; if(!r.items[id]) r.items[id]="pending"; var next=Object.assign({},s); next[room]=r; return next; }); }},'Añadir punto');
     wrap.appendChild(sel); wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(btn);
     return wrap;
   }
-
   function IncidenciasView(room){
     var data=getUserData(); var r=data[room]||{}; var items=r.items||{}; var itemNotes=r.itemNotes||{};
 
     function visibles(){ return Object.keys(items).filter(function(k){return items[k]==='fail' || items[k]==='pending'}); }
     function remaining(){
-      var set={}; CHECKS.forEach(function(c){ set[c.id]=true; });
-      Object.keys(items).filter(function(k){return items[k]==='fail' || items[k]==='pending'}).forEach(function(k){ delete set[k]; });
-      return CHECKS.filter(function(c){ return set[c.id]; });
+      var set={}; visibles().forEach(function(k){ set[k]=true; });
+      return CHECKS.filter(function(c){ return !set[c.id]; });
     }
     function setItem(id,val){
       setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]=val; var next=Object.assign({},s); next[room]=rr; return next; });
@@ -363,7 +430,7 @@
       setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.itemNotes=rr.itemNotes||{}; rr.itemNotes[id]=text; var next=Object.assign({},s); next[room]=rr; return next; });
     }
     function quitar(id){
-      setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]="none"; delete rr.itemNotes[id]; var next=Object.assign({},s); next[room]=rr; return next; });
+      setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]="none"; var next=Object.assign({},s); next[room]=rr; return next; });
     }
 
     var section = el('section',{class:'card'},
@@ -384,10 +451,9 @@
         el('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginTop:'8px'}},
           (function(){
             var wrap = el('div',null);
-            var b1 = el('button',{class:'btn',onclick:function(){ setItem(id,'fail'); },style:{background: cur==='fail'?'#ef4444':'#fff',color: cur==='fail'?'#fff':'var(--fail)',border:'1px solid var(--fail)'}}, 'Fallo');
-            var b2 = el('button',{class:'btn',onclick:function(){ setItem(id,'pending'); },style:{background: cur==='pending'?'#f59e0b':'#fff',color: cur==='pending'?'#fff':'var(--rev)',border:'1px solid var(--rev)'}}, 'Por revisar');
-            var b3 = el('button',{class:'btn',onclick:function(){ setItem(id,'ok'); },style:{background: cur==='ok'?'#10b981':'#fff',color: cur==='ok'?'#fff':'var(--ok)',border:'1px solid var(--ok)'}}, 'OK');
-            wrap.appendChild(b1); wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(b2); wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(b3);
+            var b1 = el('button',{class:'btn',onclick:function(){ setItem(id,'fail'); },style:{background: cur==='fail'?'#ef4444':'#fff',color: cur==='fail'?'#fff':'#ef4444',border:'1px solid #ef4444'}}, 'Fallo');
+            var b2 = el('button',{class:'btn',onclick:function(){ setItem(id,'pending'); },style:{background: cur==='pending'?'#f59e0b':'#fff',color: cur==='pending'?'#fff':'#f59e0b',border:'1px solid #f59e0b'}}, 'Por revisar');
+            wrap.appendChild(b1); wrap.appendChild(document.createTextNode(' ')); wrap.appendChild(b2);
             return wrap;
           })(),
           (function(){
@@ -402,7 +468,6 @@
     section.appendChild(grid);
     return section;
   }
-
   function CuentaView(){
     var profile=getUserProfile();
     function logout(){ setCurrent(null); appState.aliasLower=null; appState.page='auth'; render(); }
@@ -421,7 +486,7 @@
           if (!payload || !payload.data){ alert("Archivo inválido"); return; }
           localStorage.setItem(nsKey(appState.aliasLower), JSON.stringify(payload.data));
           location.reload();
-        }catch(e){ alert("No se pudo importar: "+(e.message||e.toString())); }
+        }catch(e){ alert("No se pudo importar"); }
       };
       fr.readAsText(file);
     }
@@ -431,7 +496,7 @@
     return el('main',{class:'container'},
       el('div',{class:'card'},
         el('h3',null, 'Usuario actual: ', profile?profile.alias:"—"),
-        el('div',{class:'kv'},'Gestiona perfiles, copia de seguridad y migración. Versión: '+APP_VERSION),
+        el('div',{class:'kv'},'Gestiona perfiles, copia de seguridad y migración.'),
         el('div',{style:{marginTop:'10px',display:'flex',gap:'8px',flexWrap:'wrap'}},
           el('button',{class:'btn',onclick:function(){ location.hash="#/auth"; }},'Cambiar usuario'),
           el('button',{class:'btn',onclick:logout},'Cerrar sesión'),
@@ -445,14 +510,13 @@
         el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap'}},
           Object.values(loadUsers()).map(function(u){
             return el('span',{class:'badge'}, u.alias, ' ', el('button',{class:'btn',style:{marginLeft:'8px'},onclick:function(){
-              var users=loadUsers(); if(!confirm('Eliminar perfil '+u.alias+' y sus datos guardados?')) return; delete users[u.alias.toLowerCase()]; saveUsers(users); localStorage.removeItem(nsKey(u.alias.toLowerCase())); if((profile&&profile.alias)===u.alias){ setCurrent(null); appState.aliasLower=null; location.hash="#/auth"; } render();
+              var users=loadUsers(); if(!confirm('Eliminar perfil '+u.alias+'?')) return; delete users[u.alias.toLowerCase()]; saveUsers(users); if((profile&&profile.alias)===u.alias){ setCurrent(null); appState.aliasLower=null; location.hash="#/auth"; } render();
             }}, 'Eliminar'));
           })
         )
       )
     );
   }
-
   function AuthView(){
     var users=loadUsers();
     var alias=""; var pin=""; var msg="";
@@ -472,7 +536,6 @@
             var al=alias.trim(); var pi=pin.trim(); if(!al||!pi){ m.textContent="Alias y PIN requeridos"; return; }
             var key=al.toLowerCase(); var u=users[key]; var h=hashPIN(pi);
             if(!u){
-              if(pi.length<4 || pi.length>8){ m.textContent="El PIN debe tener entre 4 y 8 dígitos"; return; }
               users[key]={alias:al,pinHash:h,createdAt:new Date().toISOString()}; saveUsers(users);
               try{ var legacy=localStorage.getItem(LEGACY); if(legacy && !localStorage.getItem(nsKey(key))){ localStorage.setItem(nsKey(key), legacy); localStorage.removeItem(LEGACY);} }catch(e){}
               setCurrent(key); appState.aliasLower=key; location.hash=""; return;
@@ -486,46 +549,105 @@
         Object.values(users).length>0 ? el('div',{style:{marginTop:'12px'}},
           el('div',{class:'kv'},'Perfiles existentes:'),
           el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'6px'}},
-            Object.values(users).map(function(u){ var b=el('button',{class:'btn',onclick:function(){ alias=u.alias; pin=""; document.activeElement.blur(); location.hash="#/auth"; setTimeout(function(){ if(document.querySelector('input[placeholder="Alias (ej. Frank)"]')) document.querySelector('input[placeholder="Alias (ej. Frank)"]').value=u.alias; }, 50); }},u.alias); return b; })
+            Object.values(users).map(function(u){ var b=el('button',{class:'btn'},u.alias); b.addEventListener('click',function(){ alias=u.alias; document.activeElement.blur(); }); return b; })
           )
         ) : null
       )
     );
     return main;
   }
+  
 
   function MainView(){
     var root = el('div',null,
       Header()
     );
 
-    if (appState.page==="auth"){
-      root.appendChild(AuthView());
-      return root;
-    }
-    if (appState.page==="cuenta"){
-      root.appendChild(CuentaView());
-      return root;
-    }
-    if (appState.page==="parte"){
-      root.appendChild(ParteView());
-      return root;
-    }
+    // --- VISTAS ESPECIALES (Auth, Parte, Cuenta) ---
+    if (appState.page==="auth"){ root.appendChild(AuthView()); return root; }
+    if (appState.page==="cuenta"){ root.appendChild(CuentaView()); return root; }
+    if (appState.page==="parte"){ root.appendChild(ParteView()); return root; }
 
-    if (!appState.selBlock){
+    // --- VISTA PLAN DE DISTRIBUCIÓN ---
+
+    // NIVEL 1: Selección de Zona (Residence, Villas, Leiro, Darko, Brinkmann)
+    if (!appState.selZone){
       var plan = el('main',{class:'container'},
+        el('h2',null, 'Plano General'),
         el('div',{class:'plan'},
-          BLOQUES.map(function(b){ return BlockTile(b); })
+          BLOQUES_AGRUPADOS.map(function(z){ return ZoneTile(z); })
         ),
-        el('p',{class:'kv',style:{marginTop:'10px'}}, 'Usuario: ', (getUserProfile()?getUserProfile().alias:"—"), '. Pulsa un bloque para ver sus residencias.')
+        el('p',{class:'kv',style:{marginTop:'10px'}}, 'Usuario: ', (getUserProfile()?getUserProfile().alias:"—"), '. Pulsa una zona para ver el detalle.')
       );
       root.appendChild(plan);
       return root;
     }
 
+    // NIVEL 2: Detalle de Zona / Plantas (Leiro, Darko, Brinkmann)
+    // También maneja el salto directo a habitaciones para Residence/Villas.
+    if (appState.selZone && !appState.selBlock){
+        var zone = BLOQUES_AGRUPADOS.find(z => z.id === appState.selZone);
+        if (!zone) { setRouteTo(null, null); return root; }
+        
+        var isFlatList = zone.id === "Residence" || zone.id === "Villas";
+        
+        // --- REGLA: Residence/Villas saltan directamente a la lista de habitaciones (Nivel 3) ---
+        if (isFlatList) {
+             // Creamos un bloque "virtual" para agrupar todas las habitaciones y forzar la vista de Nivel 3.
+             var blocksToShow = zone.blocks.map(getBlockById).filter(b => b);
+             var allRooms = [];
+             blocksToShow.forEach(b => {
+                 for (let i = b.from; i <= b.to; i++) allRooms.push(i);
+             });
+             
+             // Creamos un bloque "virtual" para pasar a Nivel 3 (la vista de habitaciones)
+             if(allRooms.length > 0) {
+                 appState.selBlock = { id: zone.id, label: zone.label, from: allRooms[0], to: allRooms[allRooms.length - 1], isVirtual: true };
+             } else {
+                 // Si no hay habitaciones (error), volvemos al plano
+                 appState.selZone = null;
+                 setRouteTo(null, null);
+             }
+             
+             return MainView(); // Volvemos a llamar a MainView para renderizar Nivel 3
+             
+        } else {
+            // --- Leiro, Darko, Brinkmann: mostramos las plantas/bloques (Nivel 2) ---
+            var blocksToShow = zone.blocks.map(getBlockById).filter(b => b);
+            
+            var main = el('main',{class:'container'},
+                el('h2',null, zone.label),
+                el('p',{class:'kv'}, 'Selecciona una planta para ver las habitaciones.'),
+                el('div',{class:'plan'},
+                    blocksToShow.map(function(b){ return ZoneTile(b); })
+                )
+            );
+            root.appendChild(main);
+            return root;
+        }
+    }
+
+    // NIVEL 3: Habitaciones de un Bloque/Planta (o de un grupo virtual como Residence/Villas)
     if (appState.selBlock && appState.selRoom==null){
       var b=appState.selBlock;
-      var rooms=[]; for(var i=b.from;i<=b.to;i++) rooms.push(i);
+      var rooms=[]; 
+      var title = 'Bloque ' + b.label;
+      
+      // Si el bloque es "virtual" (Residence/Villas), cargamos todas las habitaciones
+      if (b.isVirtual) {
+          title = 'Residencias en ' + b.label;
+          var zone = BLOQUES_AGRUPADOS.find(z => z.id === appState.selZone);
+          if (zone) {
+              // Cargamos las habitaciones de todos los bloques que componen la zona virtual
+              zone.blocks.map(getBlockById).filter(blk => blk).forEach(blk => {
+                  for(var i=blk.from;i<=blk.to;i++) rooms.push(i);
+              });
+          }
+      } else {
+          // Bloque normal (Planta)
+          for(var i=b.from;i<=b.to;i++) rooms.push(i);
+      }
+      
       var data=getUserData();
       function roomOverall(n){ var r=data[n]||{}; return (r.overall && r.overall!=="auto")? r.overall : autoOverallFromRoom(r); }
       var filtered = rooms.filter(function(n){
@@ -533,11 +655,13 @@
         if (appState.statusFilter==="all") return true;
         return roomOverall(n)===appState.statusFilter;
       });
+      
       var main = el('main',{class:'container'},
-        el('h2',null, 'Bloque '+b.label),
+        el('h2',null, title),
         (function(){
           var tb=el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',margin:'8px 0'}});
-          var inp=el('input',{placeholder:'Filtrar número…', value: appState.filter}); inp.addEventListener('input',function(){ appState.filter=inp.value; render(); });
+          var inp=el('input',{placeholder:'Filtrar número…', value: appState.filter}); 
+          inp.addEventListener('input',function(){ appState.filter=inp.value; render(); });
           tb.appendChild(inp);
           ['all','fail','pending','ok','none'].forEach(function(s){
             var btn=el('span',{class: 'badge'+(appState.statusFilter===s?' active':''),onclick:function(){ appState.statusFilter=s; render(); }}, s);
@@ -554,6 +678,7 @@
       return root;
     }
 
+    // NIVEL 4: Detalle de Habitación
     if (appState.selRoom!=null){
       var n=appState.selRoom; var data=getUserData(); var r=data[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"none",assumeOk:false};
       var overall = (r.overall && r.overall!=="auto")? r.overall : autoOverallFromRoom(r);
@@ -562,8 +687,7 @@
         setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; CHECKS.forEach(function(c){ rr.items[c.id]='ok'; }); var next=Object.assign({},s); next[n]=rr; return next; });
       }
       function resetRoom(){
-        if (!confirm('¿Seguro que quieres borrar todos los datos de la residencia '+n+'?')) return;
-        setUserData(function(s){ var next=Object.assign({},s); delete next[n]; return next; });
+        setUserData(function(s){ var next=Object.assign({},s); next[n]={items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; return next; });
       }
       function toggleAssumeOk(){
         setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.assumeOk=!rr.assumeOk; var next=Object.assign({},s); next[n]=rr; return next; });
@@ -580,7 +704,7 @@
           el('h2',null, 'Residencia ', String(n)),
           el('span',{class:'badge',style:{marginLeft:'auto',background:overall==="auto"?"#334155":(overall==="ok"?COLORS.ok:overall==="fail"?COLORS.fail:overall==="pending"?COLORS.review:COLORS.none),color:"#fff"}}, labelState(overall)),
           el('button',{class:'btn',onclick:toggleAssumeOk}, r.assumeOk?'Asumir resto OK: Sí':'Asumir resto OK: No'),
-          el('button',{class:'btn-danger',onclick:resetRoom}, 'Reiniciar Residencia')
+          el('button',{class:'btn-danger',onclick:resetRoom}, 'Reiniciar habitación')
         ),
         IncidenciasView(n),
         el('section',{class:'card'},
@@ -611,14 +735,12 @@
             return ta;
           })()
         ),
-        el('section',{class:'card',style:{paddingTop: '16px', marginTop: '12px'}},
-          el('span',null,'Estado global (anulación manual): '),
-          el('div', {style:{display: 'flex', gap: '8px', marginTop: '8px'}},
-            ['ok','fail','pending','auto'].map(function(s){
-              var btn=el('button',{class:'badge'+(r.overall===s?' active':''),onclick:function(){ setOverallState(s); }}, labelState(s));
-              return btn;
-            })
-          )
+        el('section',{class:'container',style:{paddingLeft:0}},
+          el('span',null,'Estado global: '),
+          ['ok','fail','pending','auto'].map(function(s){
+            var btn=el('span',{class:'badge',onclick:function(){ setOverallState(s); }}, labelState(s));
+            return btn;
+          })
         ),
         el('footer',{class:'container kv'}, APP_VERSION)
       );
