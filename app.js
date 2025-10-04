@@ -16,7 +16,7 @@
   // ---- Data ----
   var GLOBAL_LS = { users:"mh_users_v1", current:"mh_user_current_v1" };
   var LEGACY = "mh_v1_state";
-  var APP_VERSION = "v1.3.9-cost-difficulty"; // Versión actualizada a 1.3.9
+  var APP_VERSION = "v1.4.0-tickets"; // Versión actualizada
 
   var BLOQUES = [
     { id: "A", label: "A", from: 2100, to: 2107 },
@@ -71,16 +71,19 @@
     selRoom: null,
     filter: "",
     statusFilter: "all",
+    ticketStatusFilter: "pending", // New filter state for tickets
     users: loadUsers(),
     aliasLower: loadCurrent(),
     dataByUser: {} // lazy-load por usuario
   };
 
   function getUserProfile(){ return appState.aliasLower ? appState.users[appState.aliasLower] : null; }
-  function getUserData(){ var k=appState.aliasLower; if(!k) return {}; if(!appState.dataByUser[k]){ try{ var s=localStorage.getItem(nsKey(k)); appState.dataByUser[k]= s? JSON.parse(s): {}; }catch(e){ appState.dataByUser[k]={}; } } return appState.dataByUser[k]; }
+  function getUserData(){ var k=appState.aliasLower; if(!k) return {}; if(!appState.dataByUser[k]){ try{ var s=localStorage.getItem(nsKey(k)); appState.dataByUser[k]= s? JSON.parse(s): { tickets: [] }; }catch(e){ appState.dataByUser[k]={ tickets: [] }; } } return appState.dataByUser[k]; }
   function setUserData(updater){
     var k=appState.aliasLower; if(!k) return;
     var cur = getUserData();
+    // Ensure tickets array exists on initial creation
+    if (!cur.tickets) cur.tickets = [];
     var next = updater(cur);
     appState.dataByUser[k]=next;
     try{ localStorage.setItem(nsKey(k), JSON.stringify(next)); }catch(e){}
@@ -92,12 +95,12 @@
     var h=(location.hash||"").replace(/^#\/?/,"");
     if (!h) return {page:"plan",block:null,room:null};
     var p=h.split("/");
-    if (p[0]==="parte"||p[0]==="cuenta"||p[0]==="auth") return {page:p[0],block:null,room:null};
+    if (p[0]==="parte"||p[0]==="cuenta"||p[0]==="auth"||p[0]==="tickets") return {page:p[0],block:null,room:null}; // Added 'tickets' route
     var block=p[0]||null; var room=p[1]?Number(p[1]):null;
     return {page:"plan",block:block,room:room};
   }
   function setRouteTo(pg,room){
-    if (pg==="parte"||pg==="cuenta"||pg==="auth"){ location.hash = "#/"+pg; return; }
+    if (pg==="parte"||pg==="cuenta"||pg==="auth"||pg==="tickets"){ location.hash = "#/"+pg; return; } // Added 'tickets' route
     var block=pg;
     if (!block) location.hash=""; else if (!room) location.hash="#/"+block; else location.hash="#/"+block+"/"+room;
   }
@@ -136,13 +139,14 @@
   // ---- Views ----
   function Header(){
     var actions=[];
-    if (appState.page==="parte"){
+    if (appState.page==="parte" || appState.page==="tickets"){
       actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
     } else if (appState.selRoom!=null){
       actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(appState.selBlock.id,null); }},'← Residencias'));
     } else if (appState.selBlock){
       actions.push(el('button',{class:'btn-light',onclick:function(){ setRouteTo(null,null); }},'← Plano'));
     }
+    actions.push(el('button',{class:'btn',onclick:function(){ setRouteTo("tickets"); }},'Tickets')); // New Tickets button
     actions.push(el('button',{class:'btn',onclick:function(){ setRouteTo("parte"); }},'Parte'));
     actions.push(el('button',{class:'btn-primary',onclick:function(){ setRouteTo("cuenta"); }}, getUserProfile()?("Usuario: "+getUserProfile().alias):"Acceder"));
     return el('header',{class:'container'},
@@ -185,7 +189,7 @@
     return el('button',{class:'room',style:{background:realBg,color:color,borderColor:border},onclick:function(){ setRouteTo(appState.selBlock.id,n); }}, String(n));
   }
   
-  // --- FUNCIÓN MODIFICADA: Incluye campos de dificultad y costo ---
+  // MODIFIED: Incorporate cost/difficulty fields
   function MeasureForm(room){
     var wrap = el('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}});
     var sel = el('select',null,
@@ -197,7 +201,7 @@
     );
     var medida = el('input',{class:'small',placeholder:'Medida (ej. 60x90 cm)'});
     var detalle = el('input',{class:'small',placeholder:'Detalle opcional'});
-    // NUEVOS CAMPOS: Dificultad y Costo Estimado
+    // NEW FIELDS: Dificultad y Costo Estimado
     var difficulty = el('select',{class:'small'},
         el('option',{value:''},'Dificultad...'),
         el('option',{value:'Baja'},'Baja (Sencilla)'),
@@ -211,25 +215,25 @@
       var m={
         tipo:sel.value,
         medida:medida.value.trim(),
-        difficulty: difficulty.value, // Guardar dificultad
-        cost: cost.value.trim()       // Guardar costo
+        difficulty: difficulty.value, // Save difficulty
+        cost: cost.value.trim()       // Save cost
       }; 
       if(detalle.value.trim()) m.detalle=detalle.value.trim();
       setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto"}; var next=Object.assign({},s); r.measures=(r.measures||[]).concat([m]); next[room]=r; return next; });
-      // Limpiar campos
+      // Clear fields
       medida.value=""; detalle.value=""; cost.value=""; difficulty.value=""; 
     }},'Añadir');
     
     wrap.appendChild(sel); 
     wrap.appendChild(medida); 
     wrap.appendChild(detalle); 
-    wrap.appendChild(difficulty); // Añadir al DOM
-    wrap.appendChild(cost);       // Añadir al DOM
+    wrap.appendChild(difficulty); // Add to DOM
+    wrap.appendChild(cost);       // Add to DOM
     wrap.appendChild(btn);
     return wrap;
   }
   
-  // --- FUNCIÓN MODIFICADA: ParteView con Dificultad y Costo ---
+  // MODIFIED: ParteView to display cost/difficulty
   function ParteView(){
     var byBlock={};
     var data=getUserData();
@@ -260,7 +264,7 @@
     });
 
     function onCSV(){
-      // Se mantiene el CSV simple, añadiendo Dificultad/Costo al campo de Medidas
+      // Lógica de exportación CSV con Dificultad y Costo
       var rows=[["Usuario","Bloque","Residencia","Tipo","Elemento","Detalle_Obs","Medidas_Sustituciones","Notas"]]; 
       var alias=(getUserProfile()&&getUserProfile().alias)||'anon';
       BLOQUES.forEach(function(b){
@@ -269,7 +273,7 @@
           var medidas=(e.measures||[]).map(function(m){
             var mStr = "["+m.tipo+"] "+m.medida+(m.detalle?(" — "+m.detalle):"");
             if(m.difficulty) mStr += " (Dificultad: " + m.difficulty + ")";
-            if(m.cost) mStr += " (Costo Est: " + m.cost + ")";
+            if(m.cost) mStr += " (Costo Est: " + m.cost + "€)";
             return mStr;
           }).join(" | ");
           
@@ -321,7 +325,7 @@
             item.appendChild(el('div',{class:'kv',style:{marginTop:'6px'}}, 'Medidas: '+ e.measures.map(function(m){
               var mStr = '['+m.tipo+'] '+m.medida+(m.detalle?(' — '+m.detalle):'');
               if(m.difficulty) mStr += ' | Dificultad: ' + m.difficulty;
-              if(m.cost) mStr += ' | Costo Est: ' + m.cost;
+              if(m.cost) mStr += ' | Costo Est: ' + m.cost + '€';
               return mStr;
             }).join(' | ')));
           }
@@ -336,7 +340,126 @@
 
     return main;
   }
-  // --- FIN FUNCIÓN MODIFICADA: ParteView ---
+  
+  // NEW: TicketsView function and utilities
+  function generateTicketId(data){
+      var currentMax = 0;
+      (data.tickets || []).forEach(function(t){
+          if(t.id > currentMax) currentMax = t.id;
+      });
+      return currentMax + 1;
+  }
+  
+  function TicketsView(){
+      var data = getUserData();
+      var tickets = data.tickets || [];
+      var roomNumbers = [];
+      BLOQUES.forEach(function(b){ for(var i=b.from;i<=b.to;i++) roomNumbers.push(i); });
+      var roomMap = roomNumbers.reduce(function(acc, n){ acc[n] = true; return acc; }, {});
+      
+      var statusFilter = appState.ticketStatusFilter || 'pending';
+      var filteredTickets = tickets.filter(function(t){ return statusFilter === 'all' || t.status === statusFilter; });
+      
+      function setTicketStatus(id, newStatus){
+          setUserData(function(s){
+              var next = Object.assign({}, s);
+              var ticket = (next.tickets || []).find(function(t){ return t.id === id; });
+              if(ticket) ticket.status = newStatus;
+              return next;
+          });
+      }
+      function deleteTicket(id){
+          if(!confirm("¿Confirmas eliminar este ticket?")) return;
+          setUserData(function(s){
+              var next = Object.assign({}, s);
+              next.tickets = (next.tickets || []).filter(function(t){ return t.id !== id; });
+              return next;
+          });
+      }
+
+      function TicketItem(t){
+          var roomLabel = String(t.room);
+          var block = BLOQUES.find(function(b){ return t.room >= b.from && t.room <= b.to; }) || {id:'?'};
+          
+          var statusOptions = el('select', {onchange: function(){ setTicketStatus(t.id, this.value); }});
+          ['pending','in_progress','complete','deferred'].forEach(function(s){
+              statusOptions.appendChild(el('option',{value:s, selected:t.status===s}, s.replace('_',' ')));
+          });
+          
+          var statusColor = t.status === 'complete' ? COLORS.ok : t.status === 'pending' ? COLORS.fail : t.status === 'in_progress' ? COLORS.review : COLORS.none;
+          
+          return el('div',{class:'card',style:{marginTop:0,padding:'10px'}},
+              el('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},
+                  el('span',{style:{fontWeight:700,cursor:'pointer',onclick:function(){ setRouteTo(block.id, t.room); }}}, 'Ticket ' + t.id + ' · Residencia ' + roomLabel + ' (Bloque ' + block.id + ')'),
+                  el('span',{class:'badge',style:{background:statusColor,color:t.status==='deferred'?'#0f172a':'#fff'}}, t.status.replace('_',' '))
+              ),
+              el('div',{class:'kv',style:{marginTop:'4px', whiteSpace:'pre-wrap'}}, t.desc),
+              el('div',{style:{display:'flex',gap:'8px',marginTop:'8px',alignItems:'center'}},
+                  el('span',{class:'kv'}, 'Creado: ' + t.created),
+                  el('span',{style:{marginLeft:'auto'}}, statusOptions),
+                  el('button',{class:'btn-danger small', onclick: function(){ deleteTicket(t.id); }}, 'Eliminar')
+              )
+          );
+      }
+      
+      // Add Ticket Form
+      var addRoomInput = el('input',{type:'number', placeholder:'Residencia (ej. 2101)', style:{width:'120px'}});
+      var addDescInput = el('textarea',{placeholder:'Descripción del fallo/trabajo', style:{flexGrow:1, minHeight:'60px'}});
+      var addMsg = el('div',{style:{color:'#b91c1c'}});
+      var addButton = el('button',{class:'btn-primary', onclick:function(){
+          var room = Number(addRoomInput.value);
+          var desc = addDescInput.value.trim();
+          if(!room || !roomMap[room]){ addMsg.textContent = 'Número de residencia inválido.'; return; }
+          if(desc.length < 5){ addMsg.textContent = 'Descripción demasiado corta.'; return; }
+          addMsg.textContent = '';
+          
+          setUserData(function(s){
+              var next = Object.assign({}, s);
+              var newTicket = {
+                  id: generateTicketId(next),
+                  room: room,
+                  desc: desc,
+                  status: 'pending',
+                  created: nowISO()
+              };
+              next.tickets = (next.tickets || []).concat([newTicket]);
+              return next;
+          });
+          addRoomInput.value = '';
+          addDescInput.value = '';
+          appState.ticketStatusFilter = 'pending'; // Reset filter to show new ticket
+      }}, 'Añadir Ticket');
+      
+      var main = el('main',{class:'container'},
+          el('h2',null, 'Tickets de Trabajo'),
+          el('section',{class:'card'},
+              el('h3',null,'Añadir nuevo Ticket'),
+              el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
+                  addRoomInput, addDescInput, addButton
+              ),
+              addMsg
+          ),
+          el('section',{class:'card'},
+              el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
+                  el('h3',null,'Tickets: ', filteredTickets.length),
+                  (function(){
+                      var wrap = el('div',{style:{marginLeft:'auto', display:'flex', gap:'8px'}});
+                      ['all','pending','in_progress','complete','deferred'].forEach(function(s){
+                          var label = s.replace('_',' ');
+                          var btn=el('span',{class: 'badge'+(statusFilter===s?' active':''),onclick:function(){ appState.ticketStatusFilter=s; render(); }}, label);
+                          wrap.appendChild(btn);
+                      });
+                      return wrap;
+                  })()
+              ),
+              el('div',{class:'grid',style:{marginTop:'8px'}},
+                  filteredTickets.length > 0 ? filteredTickets.map(TicketItem) : el('div',{class:'kv'},'No hay tickets en este estado.')
+              )
+          )
+      );
+      return main;
+  }
+  // --- END TicketsView ---
 
   function AddIncidencia(room, remaining){
     var wrap = el('span',null);
@@ -361,7 +484,7 @@
       setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.itemNotes=rr.itemNotes||{}; rr.itemNotes[id]=text; var next=Object.assign({},s); next[room]=rr; return next; });
     }
     function quitar(id){
-      setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]="none"; var next=Object.assign({},s); next[room]=rr; return next; });
+      setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]="none"; var next=Object.assign({},s); next[n]=rr; return next; });
     }
 
     var section = el('section',{class:'card'},
@@ -503,6 +626,10 @@
       root.appendChild(ParteView());
       return root;
     }
+    if (appState.page==="tickets"){ // New Tickets View Route
+      root.appendChild(TicketsView());
+      return root;
+    }
 
     if (!appState.selBlock){
       var plan = el('main',{class:'container'},
@@ -584,8 +711,8 @@
               var li=el('li',{style:{marginBottom:'4px'}},
                 el('span',{style:{fontFamily:'monospace'}}, '['+m.tipo+'] '+m.medida),
                 m.detalle? el('span',null,' — '+m.detalle): null,
-                m.difficulty? el('span',null,' | Dificultad: '+m.difficulty): null, // Mostrar dificultad
-                m.cost? el('span',null,' | Costo Est: '+m.cost): null,               // Mostrar costo
+                m.difficulty? el('span',null,' | Dificultad: '+m.difficulty): null, // Display difficulty
+                m.cost? el('span',null,' | Costo Est: '+m.cost+'€'): null,         // Display cost
                 el('button',{class:'btn',style:{marginLeft:'8px'},onclick:function(){
                   setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.measures=(rr.measures||[]).filter(function(_,i){return i!==idx}); var next=Object.assign({},s); next[n]=rr; return next; });
                 }}, 'Eliminar')
