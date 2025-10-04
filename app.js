@@ -1,4 +1,3 @@
-git add app.js
 (function(){
   // ---- Safe boot & error overlay ----
   var overlay = document.getElementById('error-overlay');
