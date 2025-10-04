@@ -16,8 +16,9 @@
   // ---- Data ----
   var GLOBAL_LS = { users:"mh_users_v1", current:"mh_user_current_v1" };
   var LEGACY = "mh_v1_state";
-  var APP_VERSION = "v1.4.0-tickets"; // Versión actualizada
+  var APP_VERSION = "v1.5.0-final"; // Versión actualizada y corregida
 
+  // Estructura de Bloques (Nivel 2 de navegación)
   var BLOQUES = [
     { id: "A", label: "A", from: 2100, to: 2107 },
     { id: "B", label: "B", from: 2200, to: 2207 },
@@ -108,10 +109,13 @@
     var r=parseHash();
     appState.page = getUserProfile()? r.page : "auth";
     if (appState.page==="plan" && getUserProfile()){
+      // Nivel 2: Bloque/Planta. Si hay un bloque en la URL, lo busca.
       if (!r.block){ appState.selBlock=null; appState.selRoom=null; }
       else{
         var b=BLOQUES.find(function(x){return x.id===r.block;});
-        appState.selBlock=b||null; appState.selRoom=r.room||null;
+        appState.selBlock=b||null; 
+        // Nivel 3: Habitación. Si el bloque es válido, toma la habitación.
+        appState.selRoom=r.room||null;
       }
     } else { appState.selBlock=null; appState.selRoom=null; }
     render();
@@ -189,7 +193,7 @@
     return el('button',{class:'room',style:{background:realBg,color:color,borderColor:border},onclick:function(){ setRouteTo(appState.selBlock.id,n); }}, String(n));
   }
   
-  // MODIFIED: Incorporate cost/difficulty fields
+  // CLEANED: Removed Cost/Difficulty fields
   function MeasureForm(room){
     var wrap = el('div',{style:{display:'flex',gap:'6px',flexWrap:'wrap'}});
     var sel = el('select',null,
@@ -201,39 +205,27 @@
     );
     var medida = el('input',{class:'small',placeholder:'Medida (ej. 60x90 cm)'});
     var detalle = el('input',{class:'small',placeholder:'Detalle opcional'});
-    // NEW FIELDS: Dificultad y Costo Estimado
-    var difficulty = el('select',{class:'small'},
-        el('option',{value:''},'Dificultad...'),
-        el('option',{value:'Baja'},'Baja (Sencilla)'),
-        el('option',{value:'Media'},'Media (Técnico)'),
-        el('option',{value:'Alta'},'Alta (Especialista)'),
-    );
-    var cost = el('input',{class:'small',placeholder:'Costo Estimado (€)'});
     
     var btn = el('button',{class:'btn-primary',onclick:function(){
       if(!medida.value.trim()) return;
       var m={
         tipo:sel.value,
-        medida:medida.value.trim(),
-        difficulty: difficulty.value, // Save difficulty
-        cost: cost.value.trim()       // Save cost
+        medida:medida.value.trim()
       }; 
       if(detalle.value.trim()) m.detalle=detalle.value.trim();
       setUserData(function(s){ var r=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto"}; var next=Object.assign({},s); r.measures=(r.measures||[]).concat([m]); next[room]=r; return next; });
       // Clear fields
-      medida.value=""; detalle.value=""; cost.value=""; difficulty.value=""; 
+      medida.value=""; detalle.value="";
     }},'Añadir');
     
     wrap.appendChild(sel); 
     wrap.appendChild(medida); 
     wrap.appendChild(detalle); 
-    wrap.appendChild(difficulty); // Add to DOM
-    wrap.appendChild(cost);       // Add to DOM
     wrap.appendChild(btn);
     return wrap;
   }
   
-  // MODIFIED: ParteView to display cost/difficulty
+  // CLEANED: ParteView to remove all mention of cost/difficulty
   function ParteView(){
     var byBlock={};
     var data=getUserData();
@@ -264,16 +256,14 @@
     });
 
     function onCSV(){
-      // Lógica de exportación CSV con Dificultad y Costo
-      var rows=[["Usuario","Bloque","Residencia","Tipo","Elemento","Detalle_Obs","Medidas_Sustituciones","Notas"]]; 
+      // Lógica de exportación CSV (sin Dificultad ni Costo)
+      var rows=[["Usuario","Bloque","Residencia","Tipo","Elemento","Detalle","Medidas","Notas"]];
       var alias=(getUserProfile()&&getUserProfile().alias)||'anon';
       BLOQUES.forEach(function(b){
         (byBlock[b.id]||[]).forEach(function(e){
-          // Lógica de generación de Medidas para CSV (incluyendo dificultad y costo)
+          // Lógica de generación de Medidas para CSV (solo tipo y medida/detalle)
           var medidas=(e.measures||[]).map(function(m){
             var mStr = "["+m.tipo+"] "+m.medida+(m.detalle?(" — "+m.detalle):"");
-            if(m.difficulty) mStr += " (Dificultad: " + m.difficulty + ")";
-            if(m.cost) mStr += " (Costo Est: " + m.cost + "€)";
             return mStr;
           }).join(" | ");
           
@@ -320,12 +310,10 @@
               e.detalle.map(function(d){ return el('li',null, d.tipo+': '+d.label); })
             )
           );
-          // Lógica de visualización de Medidas (incluyendo dificultad y costo)
+          // Lógica de visualización de Medidas (solo tipo y medida/detalle)
           if (e.measures && e.measures.length){
             item.appendChild(el('div',{class:'kv',style:{marginTop:'6px'}}, 'Medidas: '+ e.measures.map(function(m){
               var mStr = '['+m.tipo+'] '+m.medida+(m.detalle?(' — '+m.detalle):'');
-              if(m.difficulty) mStr += ' | Dificultad: ' + m.difficulty;
-              if(m.cost) mStr += ' | Costo Est: ' + m.cost + '€';
               return mStr;
             }).join(' | ')));
           }
@@ -420,47 +408,49 @@
                   room: room,
                   desc: desc,
                   status: 'pending',
-                  created: nowISO()
+                  created: nowISO(),
+                  updated: nowISO(),
               };
-              next.tickets = (next.tickets || []).concat([newTicket]);
+              if(!next.tickets) next.tickets = [];
+              next.tickets.unshift(newTicket); // Add to start
               return next;
           });
-          addRoomInput.value = '';
-          addDescInput.value = '';
-          appState.ticketStatusFilter = 'pending'; // Reset filter to show new ticket
-      }}, 'Añadir Ticket');
+          addRoomInput.value = ''; addDescInput.value = '';
+      }}, 'Crear Ticket');
+      
+      var filterButtons = ['all', 'pending', 'in_progress', 'complete', 'deferred'].map(function(s){
+          return el('span',{
+              class: 'badge'+(statusFilter===s?' active':''),
+              onclick:function(){ appState.ticketStatusFilter=s; render(); },
+              style:{cursor:'pointer', textTransform:'capitalize'}
+          }, s.replace('_',' '));
+      });
       
       var main = el('main',{class:'container'},
-          el('h2',null, 'Tickets de Trabajo'),
+          el('h2',null, 'Gestión de Tickets'),
+          
           el('section',{class:'card'},
-              el('h3',null,'Añadir nuevo Ticket'),
-              el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
+              el('h3',null, 'Crear Nuevo Ticket'),
+              el('div',{style:{display:'flex',gap:'8px',alignItems:'flex-start',flexWrap:'wrap'}},
                   addRoomInput, addDescInput, addButton
               ),
               addMsg
           ),
-          el('section',{class:'card'},
-              el('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}},
-                  el('h3',null,'Tickets: ', filteredTickets.length),
-                  (function(){
-                      var wrap = el('div',{style:{marginLeft:'auto', display:'flex', gap:'8px'}});
-                      ['all','pending','in_progress','complete','deferred'].forEach(function(s){
-                          var label = s.replace('_',' ');
-                          var btn=el('span',{class: 'badge'+(statusFilter===s?' active':''),onclick:function(){ appState.ticketStatusFilter=s; render(); }}, label);
-                          wrap.appendChild(btn);
-                      });
-                      return wrap;
-                  })()
+          
+          el('section',{class:'card',style:{marginTop:'16px'}},
+              el('div',{style:{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginBottom:'8px'}},
+                  el('h3',{style:{marginRight:'8px'}}, 'Tickets Abiertos (' + tickets.length + ')'),
+                  el('span',null,'Filtro:'),
+                  filterButtons
               ),
-              el('div',{class:'grid',style:{marginTop:'8px'}},
-                  filteredTickets.length > 0 ? filteredTickets.map(TicketItem) : el('div',{class:'kv'},'No hay tickets en este estado.')
-              )
+              filteredTickets.length === 0 
+                  ? el('div',{class:'kv'}, statusFilter==='all'?'No hay tickets registrados.':'No hay tickets con el estado "'+statusFilter+'".')
+                  : el('div',{class:'ticket-list',style:{display:'grid',gap:'10px'}}, filteredTickets.map(TicketItem))
           )
       );
       return main;
   }
-  // --- END TicketsView ---
-
+  
   function AddIncidencia(room, remaining){
     var wrap = el('span',null);
     var sel = el('select',null, remaining.length? remaining.map(function(c){ return el('option',{value:c.id},c.label); }) : [el('option',{value:''},'(Sin puntos disponibles)')]);
@@ -484,7 +474,14 @@
       setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.itemNotes=rr.itemNotes||{}; rr.itemNotes[id]=text; var next=Object.assign({},s); next[room]=rr; return next; });
     }
     function quitar(id){
-      setUserData(function(s){ var rr=s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.items[id]="none"; var next=Object.assign({},s); next[n]=rr; return next; });
+      // Fix: Ensure the whole room object is copied when updating
+      setUserData(function(s){ 
+        var rr=Object.assign({}, s[room]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}); 
+        rr.items[id]="none"; 
+        var next=Object.assign({},s); 
+        next[room]=rr; 
+        return next; 
+      });
     }
 
     var section = el('section',{class:'card'},
@@ -626,9 +623,10 @@
       root.appendChild(ParteView());
       return root;
     }
-    if (appState.page==="tickets"){ // New Tickets View Route
-      root.appendChild(TicketsView());
-      return root;
+    // NEW: Tickets page routing
+    if (appState.page==="tickets"){
+        root.appendChild(TicketsView());
+        return root;
     }
 
     if (!appState.selBlock){
@@ -703,61 +701,4 @@
         el('section',{class:'card'},
           el('h3',null,'Medidas para sustituciones'),
           MeasureForm(n),
-          (function(){
-            var list = el('ul',{style:{marginTop:'8px',paddingLeft:'18px'}});
-            var arr = (r.measures||[]);
-            if (!arr.length){ list.appendChild(el('li',{class:'kv'},'Sin medidas aún.')); return list; }
-            arr.forEach(function(m,idx){
-              var li=el('li',{style:{marginBottom:'4px'}},
-                el('span',{style:{fontFamily:'monospace'}}, '['+m.tipo+'] '+m.medida),
-                m.detalle? el('span',null,' — '+m.detalle): null,
-                m.difficulty? el('span',null,' | Dificultad: '+m.difficulty): null, // Display difficulty
-                m.cost? el('span',null,' | Costo Est: '+m.cost+'€'): null,         // Display cost
-                el('button',{class:'btn',style:{marginLeft:'8px'},onclick:function(){
-                  setUserData(function(s){ var rr=s[n]||{items:{},itemNotes:{},notes:"",measures:[],overall:"auto",assumeOk:false}; rr.measures=(rr.measures||[]).filter(function(_,i){return i!==idx}); var next=Object.assign({},s); next[n]=rr; return next; });
-                }}, 'Eliminar')
-              );
-              list.appendChild(li);
-            });
-            return list;
-          })()
-        ),
-        el('section',{class:'card'},
-          el('h3',null,'Observaciones'),
-          (function(){
-            var ta=el('textarea',{style:{width:'100%',minHeight:'90px'}});
-            ta.value=r.notes||""; ta.addEventListener('input', function(){ setNotes(ta.value); });
-            return ta;
-          })()
-        ),
-        el('section',{class:'container',style:{paddingLeft:0}},
-          el('span',null,'Estado global: '),
-          ['ok','fail','pending','auto'].map(function(s){
-            var btn=el('span',{class:'badge',onclick:function(){ setOverallState(s); }}, labelState(s));
-            return btn;
-          })
-        ),
-        el('footer',{class:'container kv'}, APP_VERSION)
-      );
-      root.appendChild(main);
-      return root;
-    }
-
-    return root;
-  }
-
-  // ---- Render ----
-  function render(){
-    try{
-      var root = document.getElementById('app');
-      if (!root) return;
-      root.innerHTML='';
-      root.appendChild(MainView());
-      if (overlay) overlay.classList.add('hidden');
-    }catch(e){ showError(e); }
-  }
-
-  // ---- Boot ----
-  applyRoute();
-  render();
-})();
+          (function
