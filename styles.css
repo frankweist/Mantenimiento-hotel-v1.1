@@ -33,3 +33,16 @@ button{border-radius:10px;border:1px solid transparent;padding:8px 12px;cursor:p
 
 #error-overlay{position:fixed;inset:0;background:rgba(255,255,255,.95);color:#111;padding:18px;overflow:auto;z-index:9999}
 #error-overlay pre{white-space:pre-wrap;background:#fee2e2;border:1px solid #ef4444;padding:10px;border-radius:8px}
+
+/* --- Tabs globales fijas --- */
+.tabs-bar{
+  position: sticky; top: 0; z-index: 5000;
+  display: flex; gap: 6px; padding: 8px 12px; background: #fff;
+  border-bottom: 1px solid #cbd5e1;
+}
+.tab{
+  padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 10px;
+  text-decoration: none; color: #0f172a; font-weight: 600;
+}
+.tab.active{ background: #0a4077; color: #fff; border-color: #0a4077; }
+.tab:focus{ outline: 2px solid #0a4077; outline-offset: 2px; }

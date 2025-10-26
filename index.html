@@ -9,6 +9,33 @@
   <meta name="theme-color" content="#0a4077">
 </head>
 <body>
+<nav id="global-tabs" class="tabs-bar">
+  <a href="#/"          class="tab" data-route="plan">Plano</a>
+  <a href="#/parte"     class="tab" data-route="parte">Parte</a>
+  <a href="#/avisos"    class="tab" data-route="avisos">Avisos</a>
+  <a href="#/trabajos"  class="tab" data-route="trabajos">Trabajos</a>
+  <a href="#/jornada"   class="tab" data-route="jornada">Jornada</a>
+  <a href="#/cuenta"    class="tab" data-route="cuenta">Cuenta</a>
+</nav>
+
+<script>
+(function(){
+  function currentKey(){
+    const h=(location.hash||"").replace(/^#\\/?/,"");
+    const k=h.split("/")[0]||"plan";
+    return ["parte","avisos","trabajos","jornada","cuenta"].includes(k)?k:"plan";
+  }
+  function paint(){
+    const k=currentKey();
+    document.querySelectorAll('#global-tabs .tab').forEach(a=>{
+      a.classList.toggle('active', a.dataset.route===k);
+    });
+  }
+  window.addEventListener('hashchange', paint);
+  window.addEventListener('DOMContentLoaded', paint);
+})();
+</script>
+
   <div id="app"></div>
   <div id="error-overlay" class="hidden">
     <h3>La app ha fallado</h3>
@@ -16,6 +43,5 @@
     <button id="reload-btn">Recargar</button>
   </div>
   <script src="./app.js"></script>
-  <script src="./avisos.js"></script>
 </body>
 </html>
